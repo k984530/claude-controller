@@ -45,3 +45,27 @@ BASE_BRANCH="${BASE_BRANCH:-main}"
 
 # 워크트리 저장 디렉토리
 WORKTREES_DIR="${CONTROLLER_DIR}/worktrees"
+
+# ── 권한 설정 ──────────────────────────────────────────────
+# true로 설정 시 --dangerously-skip-permissions 사용 (모든 도구 무제한 허용)
+SKIP_PERMISSIONS="${SKIP_PERMISSIONS:-true}"
+
+# ── Checkpoint 설정 ────────────────────────────────────────
+# 체크포인트 감시 주기 (초) — 이 간격으로 worktree 변경을 확인
+CHECKPOINT_INTERVAL="${CHECKPOINT_INTERVAL:-5}"
+
+# ── settings.json 오버라이드 ────────────────────────────────
+# data/settings.json이 존재하면 해당 값으로 기본값을 덮어씀
+SETTINGS_FILE="${CONTROLLER_DIR}/data/settings.json"
+if [[ -f "$SETTINGS_FILE" ]] && command -v jq &>/dev/null; then
+  _s() { jq -r "$1 // empty" "$SETTINGS_FILE" 2>/dev/null; }
+  _v=$(_s '.skip_permissions');       [[ -n "$_v" ]] && SKIP_PERMISSIONS="$_v"
+  _v=$(_s '.allowed_tools');          [[ -n "$_v" ]] && DEFAULT_ALLOWED_TOOLS="$_v"
+  _v=$(_s '.model');                  [[ -n "$_v" ]] && DEFAULT_MODEL="$_v"
+  _v=$(_s '.max_jobs');               [[ -n "$_v" ]] && MAX_BACKGROUND_JOBS="$_v"
+  _v=$(_s '.append_system_prompt');   [[ -n "$_v" ]] && APPEND_SYSTEM_PROMPT="$_v"
+  _v=$(_s '.target_repo');            [[ -n "$_v" ]] && TARGET_REPO="$_v"
+  _v=$(_s '.base_branch');            [[ -n "$_v" ]] && BASE_BRANCH="$_v"
+  _v=$(_s '.checkpoint_interval');    [[ -n "$_v" ]] && CHECKPOINT_INTERVAL="$_v"
+  unset -f _s; unset _v
+fi

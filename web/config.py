@@ -1,0 +1,58 @@
+"""
+Controller Service — 경로 및 설정 상수
+"""
+
+import os
+from pathlib import Path
+
+# ══════════════════════════════════════════════════════════════
+#  경로 설정 — web/ 안에 위치하므로 parent = controller/
+# ══════════════════════════════════════════════════════════════
+
+WEB_DIR = Path(__file__).resolve().parent
+CONTROLLER_DIR = WEB_DIR.parent
+STATIC_DIR = WEB_DIR / "static"
+FIFO_PATH = CONTROLLER_DIR / "queue" / "controller.pipe"
+PID_FILE = CONTROLLER_DIR / "service" / "controller.pid"
+LOGS_DIR = CONTROLLER_DIR / "logs"
+UPLOADS_DIR = CONTROLLER_DIR / "uploads"
+DATA_DIR = CONTROLLER_DIR / "data"
+RECENT_DIRS_FILE = DATA_DIR / "recent_dirs.json"
+SETTINGS_FILE = DATA_DIR / "settings.json"
+SERVICE_SCRIPT = CONTROLLER_DIR / "service" / "controller.sh"
+SESSIONS_DIR = CONTROLLER_DIR / "sessions"
+QUEUE_DIR = CONTROLLER_DIR / "queue"
+CLAUDE_PROJECTS_DIR = Path.home() / ".claude" / "projects"
+
+PORT = int(os.environ.get("PORT", 8420))
+
+# ══════════════════════════════════════════════════════════════
+#  보안 설정
+# ══════════════════════════════════════════════════════════════
+
+# 허용된 Origin 목록 (CORS)
+# 환경변수 ALLOWED_ORIGINS로 오버라이드 가능 (쉼표 구분)
+_DEFAULT_ORIGINS = [
+    "http://claude.won-space.com",
+    "https://claude.won-space.com",
+    "http://localhost:8420",
+    "https://localhost:8420",
+]
+ALLOWED_ORIGINS: list[str] = [
+    o.strip() for o in
+    os.environ.get("ALLOWED_ORIGINS", "").split(",")
+    if o.strip()
+] or _DEFAULT_ORIGINS
+
+# 허용된 Host 헤더 (DNS Rebinding 방지)
+ALLOWED_HOSTS = {"localhost", "127.0.0.1", "[::1]"}
+
+# 인증 면제 경로 (토큰 없이 접근 가능)
+# - 정적 파일 (프론트엔드 로컬 서빙 시 필요)
+# - /api/auth/verify (토큰 검증 엔드포인트 자체)
+AUTH_EXEMPT_PREFIXES = ("/static/", "/uploads/", "/api/auth/")
+AUTH_EXEMPT_PATHS = {"/", "/index.html", "/styles.css", "/app.js"}
+
+# SSL 인증서 경로 (mkcert 생성 파일)
+SSL_CERT = os.environ.get("SSL_CERT", str(CONTROLLER_DIR / "certs" / "localhost+1.pem"))
+SSL_KEY = os.environ.get("SSL_KEY", str(CONTROLLER_DIR / "certs" / "localhost+1-key.pem"))

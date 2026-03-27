@@ -5,6 +5,7 @@ data/
 queue/
 worktrees/
 uploads/
+certs/
 service/*.pid
 
 # Python

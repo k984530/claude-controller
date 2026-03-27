@@ -13,6 +13,7 @@ source "${SCRIPT_DIR}/../lib/jobs.sh"
 source "${SCRIPT_DIR}/../lib/session.sh"
 source "${SCRIPT_DIR}/../lib/executor.sh"
 source "${SCRIPT_DIR}/../lib/worktree.sh"
+source "${SCRIPT_DIR}/../lib/checkpoint.sh"
 
 # ── 서비스 로그 ──────────────────────────────────────────────
 SERVICE_LOG="${LOGS_DIR}/service.log"
@@ -31,15 +32,14 @@ _log_error() { _log "ERROR" "$@"; }
 
 # ── 배너 출력 ────────────────────────────────────────────────
 _print_banner() {
-  local pid="$1"
   cat <<EOF
 ============================================================
   Controller Service Daemon
 ============================================================
-  PID       : ${pid}
   FIFO      : ${FIFO_PATH}
   로그      : ${SERVICE_LOG}
   최대 작업 : ${MAX_BACKGROUND_JOBS}
+  관리 기준 : Session ID
 ------------------------------------------------------------
   [대기 중] FIFO 파이프에서 메시지를 수신합니다...
 ============================================================
@@ -86,6 +86,16 @@ _on_signal() {
 
 trap _on_signal SIGTERM SIGINT SIGHUP
 
+# ── 중복 디스패치 방지 ────────────────────────────────────────
+# 최근 디스패치된 프롬프트 해시와 타임스탬프를 기록
+_LAST_DISPATCH_HASH=""
+_LAST_DISPATCH_TIME=0
+_DEDUP_WINDOW_SEC=3  # 동일 프롬프트를 무시하는 시간 창(초)
+
+_prompt_hash() {
+  printf '%s' "$1" | md5 2>/dev/null || printf '%s' "$1" | md5sum 2>/dev/null | cut -d' ' -f1
+}
+
 # ── dispatch_job: JSON 메시지 파싱 후 claude -p 실행 ────────
 dispatch_job() {
   local json_line="$1"
@@ -97,13 +107,15 @@ dispatch_job() {
   fi
 
   # 필드 추출 (callback은 보안상 제거됨 — eval 인젝션 방지)
-  local job_uuid prompt cwd use_worktree repo session_raw
+  local job_uuid prompt cwd use_worktree repo session_raw images_json reuse_wt
   job_uuid=$(echo "$json_line" | jq -r '.id // empty')
   prompt=$(echo "$json_line" | jq -r '.prompt // empty')
   cwd=$(echo "$json_line" | jq -r '.cwd // empty')
   use_worktree=$(echo "$json_line" | jq -r '.worktree // empty')
   repo=$(echo "$json_line" | jq -r '.repo // empty')
   session_raw=$(echo "$json_line" | jq -r '.session // empty')
+  images_json=$(echo "$json_line" | jq -c '.images // empty')
+  reuse_wt=$(echo "$json_line" | jq -r '.reuse_worktree // empty')
 
   if [[ -z "$prompt" ]]; then
     _log_error "프롬프트가 비어있습니다: ${json_line:0:200}"
@@ -114,6 +126,22 @@ dispatch_job() {
   if [[ -z "$job_uuid" ]]; then
     job_uuid=$(date '+%s')-$$-$RANDOM
   fi
+
+  # ── 중복 프롬프트 감지 (짧은 시간 내 동일 프롬프트 무시) ──
+  local now
+  now=$(date '+%s')
+  local phash
+  phash=$(_prompt_hash "$prompt")
+  local elapsed=$(( now - _LAST_DISPATCH_TIME ))
+
+  if [[ "$phash" == "$_LAST_DISPATCH_HASH" && $elapsed -lt $_DEDUP_WINDOW_SEC ]]; then
+    _log_warn "중복 프롬프트 무시 (${elapsed}초 이내 동일 요청): id=${job_uuid}"
+    echo "  [무시] 중복 요청이 감지되어 건너뜁니다: ${job_uuid}"
+    return 0
+  fi
+
+  _LAST_DISPATCH_HASH="$phash"
+  _LAST_DISPATCH_TIME="$now"
 
   _log_info "작업 수신: id=${job_uuid} prompt='${prompt:0:80}...'"
 
@@ -144,10 +172,18 @@ dispatch_job() {
   local _tmp="${meta_file}.tmp.$$"
   { cat "$meta_file"; echo "UUID=${job_uuid}"; } > "$_tmp" && mv -f "$_tmp" "$meta_file"
 
-  # ── Worktree 생성 (요청된 경우) ──
+  # ── Worktree 결정: 재사용(rewind) > 새로 생성 ──
   local wt_path=""
   local effective_repo="${repo:-$TARGET_REPO}"
-  if [[ "$use_worktree" == "true" && -n "$effective_repo" ]]; then
+
+  if [[ -n "$reuse_wt" && -d "$reuse_wt" ]]; then
+    # Rewind: 기존 worktree 재사용
+    wt_path="$reuse_wt"
+    _tmp="${meta_file}.tmp.$$"
+    { cat "$meta_file"; echo "WORKTREE='${wt_path}'"; echo "REWIND=true"; } > "$_tmp" && mv -f "$_tmp" "$meta_file"
+    _log_info "Job #${job_id} 기존 워크트리 재사용 (rewind): ${wt_path}"
+  elif [[ "$use_worktree" == "true" && -n "$effective_repo" ]]; then
+    # 새 worktree 생성
     wt_path=$(worktree_create "$job_id" "$effective_repo" 2>/dev/null)
     if [[ -n "$wt_path" && -d "$wt_path" ]]; then
       _tmp="${meta_file}.tmp.$$"
@@ -159,13 +195,96 @@ dispatch_job() {
     fi
   fi
 
+  # ── 이미지 파일을 @path 형태로 프롬프트에 추가 ──
+  if [[ -n "$images_json" && "$images_json" != "null" ]]; then
+    local img_count
+    img_count=$(echo "$images_json" | jq -r 'length' 2>/dev/null)
+    if [[ "$img_count" -gt 0 ]] 2>/dev/null; then
+      local img_refs=""
+      local i=0
+      while [[ $i -lt $img_count ]]; do
+        local img_path
+        img_path=$(echo "$images_json" | jq -r ".[$i]" 2>/dev/null)
+        if [[ -n "$img_path" && -f "$img_path" ]]; then
+          img_refs="${img_refs} @${img_path}"
+          _log_info "Job 이미지 첨부: ${img_path}"
+        else
+          _log_warn "이미지 파일 없음 (건너뜀): ${img_path}"
+        fi
+        (( i++ )) || true
+      done
+      if [[ -n "$img_refs" ]]; then
+        prompt="${prompt}${img_refs}"
+      fi
+    fi
+  fi
+
   # claude -p 인자 구성 (stream-json + verbose로 실시간 추론 스트리밍)
   local args=()
+
+  # ── 세션 플래그를 -p 보다 앞에 배치 (CLI 파서 호환성) ──
+  if [[ -n "$session_raw" ]]; then
+    case "$session_raw" in
+      resume:*)
+        local resume_sid="${session_raw#resume:}"
+        args+=(--resume "$resume_sid")
+        _log_info "Job 세션 모드: resume (sid=${resume_sid})"
+        ;;
+      fork:*)
+        local fork_sid="${session_raw#fork:}"
+        # Fork: 이전 세션의 결과를 컨텍스트로 주입하여 새 세션으로 실행
+        local prev_result="" prev_prompt_text="" best_jid=0
+        for mf in "${LOGS_DIR}"/job_*.meta; do
+          [[ -f "$mf" ]] || continue
+          local sid
+          sid=$(_get_meta_field "$mf" "SESSION_ID")
+          if [[ "$sid" == "$fork_sid" ]]; then
+            local jid
+            jid=$(_get_meta_field "$mf" "JOB_ID")
+            # 가장 최신 job_id (가장 큰 숫자)를 선택
+            if [[ "$jid" -gt "$best_jid" ]] 2>/dev/null; then
+              best_jid="$jid"
+              prev_prompt_text=$(_get_meta_field "$mf" "PROMPT")
+              local of="${LOGS_DIR}/job_${jid}.out"
+              if [[ -f "$of" ]]; then
+                prev_result=$(grep '"type":"result"' "$of" | tail -1 | jq -r '.result // empty' 2>/dev/null)
+              fi
+            fi
+          fi
+        done
+        if [[ -n "$prev_result" ]]; then
+          # 이전 결과가 너무 길면 앞부분만 사용 (토큰 제한 방지)
+          local max_ctx=8000
+          if [[ ${#prev_result} -gt $max_ctx ]]; then
+            prev_result="${prev_result:0:$max_ctx}
+... (이전 응답 ${#prev_result}자 중 ${max_ctx}자까지 포함)"
+          fi
+          prompt="[이전 대화에서 분기 (Fork from session: ${fork_sid:0:8}...)]
+--- 이전 프롬프트 ---
+${prev_prompt_text}
+--- 이전 응답 ---
+${prev_result}
+--- 새로운 지시 (이전 컨텍스트를 참고하여 수행) ---
+${prompt}"
+          _log_info "Job 세션 모드: fork (sid=${fork_sid}, job_id=${best_jid}, context=${#prev_result} chars)"
+        else
+          _log_warn "Job 세션 모드: fork — 이전 세션 결과 없음, 새 세션으로 실행 (sid=${fork_sid})"
+        fi
+        ;;
+      continue)
+        args+=(--continue)
+        _log_info "Job 세션 모드: continue"
+        ;;
+    esac
+  fi
+
   args+=(-p "$prompt")
   args+=(--output-format stream-json)
   args+=(--verbose)
 
-  if [[ -n "${DEFAULT_ALLOWED_TOOLS:-}" ]]; then
+  if [[ "${SKIP_PERMISSIONS:-false}" == "true" ]]; then
+    args+=(--dangerously-skip-permissions)
+  elif [[ -n "${DEFAULT_ALLOWED_TOOLS:-}" ]]; then
     args+=(--allowedTools "$DEFAULT_ALLOWED_TOOLS")
   fi
 
@@ -175,18 +294,6 @@ dispatch_job() {
 
   if [[ -n "${APPEND_SYSTEM_PROMPT:-}" ]]; then
     args+=(--append-system-prompt "$APPEND_SYSTEM_PROMPT")
-  fi
-
-  # 세션 이어가기 플래그
-  if [[ -n "$session_raw" ]]; then
-    case "$session_raw" in
-      resume:*)
-        args+=(--resume "${session_raw#resume:}")
-        ;;
-      continue)
-        args+=(--continue)
-        ;;
-    esac
   fi
 
   # cwd 결정: worktree > JSON cwd > 글로벌 WORKING_DIR > 현재 디렉토리
@@ -202,14 +309,49 @@ dispatch_job() {
 
   # 백그라운드 서브쉘에서 실행 (cd로 작업 디렉토리 변경)
   (
-    _log_info "Job #${job_id} 실행 시작 (uuid=${job_uuid}, PID=$$, cwd=${effective_cwd}, worktree=${wt_path:-none})"
+    _log_info "Job #${job_id} 실행 시작 (uuid=${job_uuid}, cwd=${effective_cwd}, worktree=${wt_path:-none})"
 
     cd "$effective_cwd" 2>/dev/null || true
-    "$CLAUDE_BIN" "${args[@]}" < /dev/null > "$out_file" 2>&1
+
+    # ── Worktree가 있으면 체크포인트 워처 시작 ──
+    if [[ -n "$wt_path" && -d "$wt_path" ]]; then
+      checkpoint_watcher_loop "$wt_path" "$job_id" "$meta_file" &
+      _log_info "Job #${job_id} 체크포인트 워처 시작됨"
+    fi
+
+    # stream-json 출력을 파일에 쓰면서 session_id를 조기 캡처
+    # stdbuf/gstdbuf로 라인 버퍼링 강제 (파일 리디렉션 시 블록 버퍼링 방지)
+    if command -v stdbuf &>/dev/null; then
+      stdbuf -oL "$CLAUDE_BIN" "${args[@]}" < /dev/null > "$out_file" 2>&1 &
+    elif command -v gstdbuf &>/dev/null; then
+      gstdbuf -oL "$CLAUDE_BIN" "${args[@]}" < /dev/null > "$out_file" 2>&1 &
+    else
+      "$CLAUDE_BIN" "${args[@]}" < /dev/null > "$out_file" 2>&1 &
+    fi
+    local claude_pid=$!
+
+    # 조기 session_id 캡처: 출력 파일 첫 이벤트에서 session_id 추출
+    local _sid_captured=""
+    local _sid_wait=0
+    while kill -0 "$claude_pid" 2>/dev/null && [[ $_sid_wait -lt 30 ]]; do
+      if [[ -f "$out_file" && -s "$out_file" ]]; then
+        _sid_captured=$(grep -m1 '"session_id"' "$out_file" 2>/dev/null | head -1 | jq -r '.session_id // empty' 2>/dev/null)
+        if [[ -n "$_sid_captured" ]]; then
+          job_set_session "$job_id" "$_sid_captured"
+          session_save "$_sid_captured" "$prompt"
+          _log_info "Job #${job_id} 조기 session_id 캡처: ${_sid_captured:0:8}..."
+          break
+        fi
+      fi
+      sleep 1
+      (( _sid_wait++ )) || true
+    done
+
+    wait "$claude_pid" 2>/dev/null
     local exit_code=$?
 
-    # stream-json에서 최종 result와 session_id 추출
-    if [[ -f "$out_file" ]]; then
+    # 조기 캡처되지 않았다면 최종 result에서 추출
+    if [[ -z "$_sid_captured" && -f "$out_file" ]]; then
       local result_line
       result_line=$(grep '"type":"result"' "$out_file" | tail -1)
       if [[ -n "$result_line" ]]; then
@@ -220,7 +362,7 @@ dispatch_job() {
       fi
     fi
 
-    # 상태 갱신
+    # 상태 갱신 (워처가 이 변경을 감지하고 최종 커밋 후 종료됨)
     if [[ $exit_code -eq 0 ]]; then
       job_mark_done "$job_id"
       _log_info "Job #${job_id} 완료 (exit=0)"
@@ -229,6 +371,9 @@ dispatch_job() {
       _log_error "Job #${job_id} 실패 (exit=${exit_code})"
     fi
 
+    # 체크포인트 워처 종료 대기
+    wait 2>/dev/null || true
+
   ) &
 
   local bg_pid=$!
@@ -236,8 +381,8 @@ dispatch_job() {
 
   local wt_label=""
   [[ -n "$wt_path" ]] && wt_label=" [worktree: $(basename "$wt_path")]"
-  _log_info "Job #${job_id} 디스패치 완료 (PID=${bg_pid})${wt_label}"
-  echo "  [디스패치] Job #${job_id} (uuid=${job_uuid}) → PID ${bg_pid}${wt_label}"
+  _log_info "Job #${job_id} 디스패치 완료${wt_label}"
+  echo "  [디스패치] Job #${job_id} (uuid=${job_uuid})${wt_label} — session_id는 실행 후 자동 할당됩니다."
 }
 
 # ── start_service: 데몬 메인 루프 ───────────────────────────
@@ -273,7 +418,7 @@ start_service() {
   _log_info "서비스 시작 (PID: $$)"
 
   # 배너 출력
-  _print_banner $$
+  _print_banner
 
   # ── 메인 수신 루프 ──────────────────────────────────────
   # 외부 while true: FIFO EOF 시 다시 열기

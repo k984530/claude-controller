@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # ============================================================
 # 백그라운드 작업(Job) 관리 모듈
-# & 로 실행된 작업의 상태, 결과, PID 를 추적합니다.
+# Session ID 기반으로 작업의 상태, 결과를 추적합니다.
+# PID는 내부 프로세스 관리 전용으로만 사용합니다.
 # ============================================================
 
 # ── 안전한 .meta 파일 파서 ─────────────────────────────────
@@ -120,7 +121,7 @@ job_status() {
     local STATUS="" PID=""
     STATUS=$(_get_meta_field "$meta_file" "STATUS")
     PID=$(_get_meta_field "$meta_file" "PID")
-    # PID가 아직 살아있는지 확인
+    # PID가 아직 살아있는지 확인 (내부 전용)
     if [[ "$STATUS" == "running" && -n "$PID" ]]; then
       if ! kill -0 "$PID" 2>/dev/null; then
         job_mark_done "$job_id"
@@ -133,6 +134,58 @@ job_status() {
   fi
 }
 
+# ── Session ID로 Job 찾기 ────────────────────────────────
+# session_id로 가장 최신 job_id를 반환한다.
+job_find_by_session() {
+  local target_sid="$1"
+  local best_jid=0 found_jid=""
+  for meta_file in "${LOGS_DIR}"/job_*.meta; do
+    [[ -f "$meta_file" ]] || continue
+    local sid
+    sid=$(_get_meta_field "$meta_file" "SESSION_ID")
+    if [[ "$sid" == "$target_sid" ]]; then
+      local jid
+      jid=$(_get_meta_field "$meta_file" "JOB_ID")
+      if [[ "$jid" -gt "$best_jid" ]] 2>/dev/null; then
+        best_jid="$jid"
+        found_jid="$jid"
+      fi
+    fi
+  done
+  if [[ -n "$found_jid" ]]; then
+    echo "$found_jid"
+    return 0
+  fi
+  return 1
+}
+
+# ── 실행 중인 Job의 Session ID 조기 추출 ────────────────
+# stream-json 출력 파일에서 session_id를 탐색하여 meta에 캐싱한다.
+job_get_session_id() {
+  local job_id="$1"
+  local meta_file="${LOGS_DIR}/job_${job_id}.meta"
+
+  # meta 파일에서 먼저 확인
+  local sid
+  sid=$(_get_meta_field "$meta_file" "SESSION_ID")
+  if [[ -n "$sid" ]]; then
+    echo "$sid"
+    return 0
+  fi
+
+  # stream 출력에서 조기 추출 시도
+  local out_file="${LOGS_DIR}/job_${job_id}.out"
+  if [[ -f "$out_file" ]]; then
+    sid=$(grep -m1 '"session_id"' "$out_file" 2>/dev/null | head -1 | jq -r '.session_id // empty' 2>/dev/null)
+    if [[ -n "$sid" ]]; then
+      job_set_session "$job_id" "$sid"
+      echo "$sid"
+      return 0
+    fi
+  fi
+  return 1
+}
+
 # ── 전체 작업 목록 ─────────────────────────────────────────
 jobs_list() {
   local meta_files=("${LOGS_DIR}"/job_*.meta)
@@ -141,8 +194,8 @@ jobs_list() {
     return
   fi
 
-  printf "  %-4s  %-9s  %-6s  %-19s  %s\n" "ID" "STATUS" "PID" "CREATED" "PROMPT"
-  printf "  %-4s  %-9s  %-6s  %-19s  %s\n" "----" "---------" "------" "-------------------" "--------------------"
+  printf "  %-4s  %-9s  %-10s  %-19s  %s\n" "ID" "STATUS" "SESSION" "CREATED" "PROMPT"
+  printf "  %-4s  %-9s  %-10s  %-19s  %s\n" "----" "---------" "----------" "-------------------" "--------------------"
 
   # 최근 작업이 위로 오도록 JOB_ID 내림차순 정렬
   local sorted_files
@@ -159,18 +212,24 @@ jobs_list() {
   for meta_file in "${sorted_files[@]}"; do
     [[ -f "$meta_file" ]] || continue
     (
-      local JOB_ID="" STATUS="" PID="" PROMPT="" CREATED_AT=""
+      local JOB_ID="" STATUS="" PID="" PROMPT="" CREATED_AT="" SESSION_ID=""
       _load_meta "$meta_file"
-      # 프로세스 생존 확인
+      # 프로세스 생존 확인 (내부 전용)
       if [[ "$STATUS" == "running" && -n "$PID" ]]; then
         if ! kill -0 "$PID" 2>/dev/null; then
           STATUS="done"
         fi
       fi
+      # Session ID가 없으면 stream에서 조기 추출 시도
+      if [[ -z "$SESSION_ID" ]]; then
+        SESSION_ID=$(job_get_session_id "$JOB_ID" 2>/dev/null) || true
+      fi
+      local short_sid="${SESSION_ID:0:8}"
+      [[ ${#SESSION_ID} -gt 8 ]] && short_sid="${short_sid}.."
       local short_prompt="${PROMPT:0:40}"
       [[ ${#PROMPT} -gt 40 ]] && short_prompt="${short_prompt}..."
-      printf "  %-4s  %-9s  %-6s  %-19s  %s\n" \
-        "$JOB_ID" "$STATUS" "${PID:-"-"}" "$CREATED_AT" "$short_prompt"
+      printf "  %-4s  %-9s  %-10s  %-19s  %s\n" \
+        "$JOB_ID" "$STATUS" "${short_sid:-"-"}" "$CREATED_AT" "$short_prompt"
     )
   done
 }
@@ -219,8 +278,21 @@ job_session_id() {
 }
 
 # ── 작업 강제 종료 ─────────────────────────────────────────
+# job_id 또는 session_id로 호출 가능.
+# session_id(UUID 형태)가 입력되면 자동으로 job_id로 변환한다.
 job_kill() {
-  local job_id="$1"
+  local identifier="$1"
+  local job_id="$identifier"
+
+  # UUID 형태(하이픈 포함 36자)이면 session_id로 간주
+  if [[ "$identifier" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
+    job_id=$(job_find_by_session "$identifier")
+    if [[ -z "$job_id" ]]; then
+      echo "  [오류] Session ID '${identifier:0:8}...'에 해당하는 작업을 찾을 수 없습니다."
+      return 1
+    fi
+  fi
+
   local meta_file="${LOGS_DIR}/job_${job_id}.meta"
 
   if [[ ! -f "$meta_file" ]]; then
@@ -228,11 +300,12 @@ job_kill() {
     return 1
   fi
 
-  local STATUS="" PID=""
+  local STATUS="" PID="" SESSION_ID=""
   _load_meta "$meta_file"
+  local sid_label="${SESSION_ID:+${SESSION_ID:0:8}..}"
 
   if [[ "$STATUS" != "running" ]]; then
-    echo "  Job #${job_id}는 이미 종료되었습니다. (status: $STATUS)"
+    echo "  Job #${job_id}${sid_label:+ (session: $sid_label)}는 이미 종료되었습니다. (status: $STATUS)"
     return 0
   fi
 
@@ -241,10 +314,10 @@ job_kill() {
     sleep 0.5
     kill -0 "$PID" 2>/dev/null && kill -9 "$PID" 2>/dev/null
     job_mark_failed "$job_id"
-    echo "  Job #${job_id} (PID: $PID) 종료됨."
+    echo "  Job #${job_id}${sid_label:+ (session: $sid_label)} 종료됨."
   else
     job_mark_done "$job_id"
-    echo "  Job #${job_id}는 이미 종료된 프로세스입니다."
+    echo "  Job #${job_id}${sid_label:+ (session: $sid_label)}는 이미 종료된 프로세스입니다."
   fi
 }
 
