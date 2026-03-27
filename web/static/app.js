@@ -299,7 +299,7 @@ function _selectSession(sid, prompt) {
   _contextSessionPrompt = prompt;
   _updateContextUI();
   _closeSessionPicker();
-  showToast('\uc138\uc158 \uc120\ud0dd: ' + sid.slice(0, 8) + '...');
+  showToast(t('msg_session_select') + ': ' + sid.slice(0, 8) + '...');
 }
 
 function _closeSessionPicker() {
@@ -505,7 +505,7 @@ async function sendTask(e) {
 
   const prompt = document.getElementById('promptInput').value.trim();
   if (!prompt) {
-    showToast('프롬프트를 입력해주세요.', 'error');
+    showToast(t('msg_prompt_required'), 'error');
     return false;
   }
 
@@ -538,18 +538,18 @@ async function sendTask(e) {
 
     await apiFetch('/api/send', { method: 'POST', body: JSON.stringify(body) });
     const modeMsg = _contextMode === 'resume' ? ' (resume)' : _contextMode === 'fork' ? ' (fork)' : '';
-    showToast('\uc791\uc5c5\uc774 \uc804\uc1a1\ub418\uc5c8\uc2b5\ub2c8\ub2e4.' + modeMsg);
+    showToast(t('msg_task_sent') + modeMsg);
     if (cwd) addRecentDir(cwd);
     document.getElementById('promptInput').value = '';
     clearAttachments();
     clearContext();
     fetchJobs();
   } catch (err) {
-    showToast(`전송 실패: ${err.message}`, 'error');
+    showToast(`${t('msg_send_failed')}: ${err.message}`, 'error');
   } finally {
     _sendLock = false;
     btn.disabled = false;
-    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> 전송';
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> <span data-i18n="send">' + t('send') + '</span>';
   }
   return false;
 }
@@ -557,7 +557,7 @@ async function sendTask(e) {
 // ── Job List ──
 function statusBadgeHtml(status) {
   const s = (status || 'unknown').toLowerCase();
-  const labels = { running: '실행 중', done: '완료', failed: '실패', pending: '대기 중' };
+  const labels = { running: t('status_running'), done: t('status_done'), failed: t('status_failed'), pending: t('status_pending') };
   const cls = { running: 'badge-running', done: 'badge-done', failed: 'badge-failed', pending: 'badge-pending' };
   return `<span class="badge ${cls[s] || 'badge-pending'}">${labels[s] || s}</span>`;
 }
@@ -585,7 +585,7 @@ function quickForkSession(sessionId) {
   _contextSessionId = sessionId;
   _contextSessionPrompt = null;
   _updateContextUI();
-  showToast('Fork 모드로 전환됨 (' + sessionId.slice(0, 8) + '...). 새 프롬프트를 입력하세요.');
+  showToast(t('msg_fork_mode') + ' (' + sessionId.slice(0, 8) + '...). ' + t('msg_fork_input'));
   document.getElementById('promptInput').focus();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -614,7 +614,7 @@ async function sendFollowUp(jobId) {
   if (!input) return;
   const prompt = input.value.trim();
   if (!prompt) {
-    showToast('이어서 실행할 명령을 입력해주세요.', 'error');
+    showToast(t('msg_continue_input'), 'error');
     return;
   }
 
@@ -623,7 +623,7 @@ async function sendFollowUp(jobId) {
   const cwd = panel ? panel.dataset.cwd : '';
 
   if (!sessionId) {
-    showToast('세션 ID가 없어서 이어서 실행할 수 없습니다.', 'error');
+    showToast(t('msg_no_session_id'), 'error');
     return;
   }
 
@@ -638,11 +638,11 @@ async function sendFollowUp(jobId) {
     if (cwd) body.cwd = cwd;
 
     await apiFetch('/api/send', { method: 'POST', body: JSON.stringify(body) });
-    showToast('세션 이어서 명령이 전송되었습니다.');
+    showToast(t('msg_continue_sent'));
     input.value = '';
     fetchJobs();
   } catch (err) {
-    showToast(`전송 실패: ${err.message}`, 'error');
+    showToast(`${t('msg_send_failed')}: ${err.message}`, 'error');
   } finally {
     _sendLock = false;
     btn.disabled = false;
@@ -659,7 +659,7 @@ async function retryJob(jobId) {
     const jobs = Array.isArray(data) ? data : (data.jobs || []);
     const job = jobs.find(j => String(j.id || j.job_id) === String(jobId));
     if (!job || !job.prompt) {
-      showToast('원본 프롬프트를 찾을 수 없습니다.', 'error');
+      showToast(t('msg_no_original_prompt'), 'error');
       return;
     }
 
@@ -667,10 +667,10 @@ async function retryJob(jobId) {
     if (job.cwd) body.cwd = job.cwd;
 
     await apiFetch('/api/send', { method: 'POST', body: JSON.stringify(body) });
-    showToast('같은 프롬프트로 다시 실행되었습니다.');
+    showToast(t('msg_rerun_done'));
     fetchJobs();
   } catch (err) {
-    showToast(`재실행 실패: ${err.message}`, 'error');
+    showToast(`${t('msg_rerun_failed')}: ${err.message}`, 'error');
   } finally {
     _sendLock = false;
   }
@@ -1024,7 +1024,7 @@ function renderStreamDone(jobId) {
 function copyStreamResult(jobId) {
   const state = streamState[jobId];
   if (!state || state.events.length === 0) {
-    showToast('복사할 결과가 없습니다.', 'error');
+    showToast(t('msg_copy_no_result'), 'error');
     return;
   }
 
@@ -1053,14 +1053,14 @@ function copyStreamResult(jobId) {
 
   const text = textParts.join('\n').trim();
   if (!text) {
-    showToast('복사할 텍스트 결과가 없습니다.', 'error');
+    showToast(t('msg_copy_no_text'), 'error');
     return;
   }
 
   navigator.clipboard.writeText(text).then(() => {
-    showToast('결과가 클립보드에 복사되었습니다.');
+    showToast(t('msg_copy_done'));
   }).catch(() => {
-    showToast('클립보드 복사에 실패했습니다.', 'error');
+    showToast(t('msg_copy_failed'), 'error');
   });
 }
 
@@ -1073,7 +1073,7 @@ async function deleteJob(jobId) {
       delete streamState[jobId];
     }
     if (expandedJobId === jobId) expandedJobId = null;
-    showToast('작업이 제거되었습니다.');
+    showToast(t('msg_job_deleted'));
     fetchJobs();
   } catch (err) {
     showToast(`제거 실패: ${err.message}`, 'error');
@@ -1318,7 +1318,7 @@ document.addEventListener('keydown', function(e) {
 function refreshAll() {
   checkStatus();
   fetchJobs();
-  showToast('전체 새로고침 완료');
+  showToast(t('msg_refresh_done'));
 }
 
 // ── Initialize ──
@@ -1419,9 +1419,338 @@ async function init() {
   });
 }
 
+// ══════════════════════════════════════════════════
+//  i18n — 국제화 (Internationalization)
+// ══════════════════════════════════════════════════
+
+const I18N = {
+  ko: {
+    title:'Controller Service', send_task:'새 작업 전송', prompt:'프롬프트',
+    prompt_placeholder:'Claude에게 전달할 명령을 입력하세요... (파일/이미지 드래그 또는 붙여넣기 가능)',
+    drop_files:'파일을 여기에 놓으세요', select_directory:'디렉토리를 선택하세요...',
+    browse_directory:'디렉토리 탐색', reset:'초기화', send:'전송',
+    job_list:'작업 목록', status:'상태', folder:'폴더', created_at:'생성 시간',
+    delete_completed:'완료 삭제', loading_jobs:'작업 목록을 불러오는 중...',
+    local_server_connection:'로컬 서버 연결', server_address:'서버 주소',
+    server_address_desc:'로컬에서 실행 중인 Controller 서버 주소',
+    auth_token:'인증 토큰', auth_token_desc:'서버 시작 시 터미널에 표시되는 Auth Token',
+    disconnect:'연결 해제', connect:'연결', settings:'설정',
+    language_settings:'언어 설정', display_language:'표시 언어',
+    display_language_desc:'인터페이스에 표시되는 언어를 선택합니다',
+    close:'닫기', save:'저장', select_session:'세션 선택',
+    this_project_only:'이 프로젝트만', search_prompt:'프롬프트 검색...',
+    msg_settings_saved:'설정이 저장되었습니다', msg_settings_save_failed:'설정 저장 실패',
+    msg_prompt_required:'프롬프트를 입력해주세요.', msg_task_sent:'작업이 전송되었습니다.',
+    msg_send_failed:'전송 실패', msg_upload_failed:'업로드 실패',
+    msg_file_read_failed:'파일 읽기 실패',
+    msg_copy_done:'결과가 클립보드에 복사되었습니다.', msg_copy_failed:'클립보드 복사에 실패했습니다.',
+    msg_copy_no_result:'복사할 결과가 없습니다.', msg_copy_no_text:'복사할 텍스트 결과가 없습니다.',
+    msg_job_deleted:'작업이 제거되었습니다.', msg_delete_failed:'제거 실패',
+    msg_batch_deleted:'개 완료 작업이 제거되었습니다.', msg_batch_delete_failed:'일괄 제거 실패',
+    msg_connected:'로컬 서버에 연결되었습니다', msg_disconnected:'연결이 해제되었습니다',
+    msg_session_select:'세션 선택',
+    msg_fork_mode:'Fork 모드로 전환됨', msg_fork_input:'새 프롬프트를 입력하세요.',
+    msg_continue_input:'이어서 실행할 명령을 입력해주세요.',
+    msg_no_session_id:'세션 ID가 없어서 이어서 실행할 수 없습니다.',
+    msg_continue_sent:'세션 이어서 명령이 전송되었습니다.',
+    msg_no_original_prompt:'원본 프롬프트를 찾을 수 없습니다.',
+    msg_rerun_done:'같은 프롬프트로 다시 실행되었습니다.', msg_rerun_failed:'재실행 실패',
+    msg_refresh_done:'전체 새로고침 완료',
+    msg_service_start:'서비스 시작 요청 완료', msg_service_stop:'서비스 중지 요청 완료',
+    msg_service_restart:'서비스 재시작 요청 완료', msg_service_failed:'서비스 요청 실패',
+    status_running:'실행 중', status_done:'완료', status_failed:'실패', status_pending:'대기 중',
+    no_jobs:'작업이 없습니다', connected_to:'연결됨',
+  },
+  en: {
+    title:'Controller Service', send_task:'Send Task', prompt:'Prompt',
+    prompt_placeholder:'Enter a command for Claude... (drag & drop or paste files/images)',
+    drop_files:'Drop files here', select_directory:'Select a directory...',
+    browse_directory:'Browse Directory', reset:'Reset', send:'Send',
+    job_list:'Job List', status:'Status', folder:'Folder', created_at:'Created',
+    delete_completed:'Delete Done', loading_jobs:'Loading job list...',
+    local_server_connection:'Local Server Connection', server_address:'Server Address',
+    server_address_desc:'Address of the locally running Controller server',
+    auth_token:'Auth Token', auth_token_desc:'Auth Token shown in the terminal when the server starts',
+    disconnect:'Disconnect', connect:'Connect', settings:'Settings',
+    language_settings:'Language', display_language:'Display Language',
+    display_language_desc:'Select the language for the interface',
+    close:'Close', save:'Save', select_session:'Select Session',
+    this_project_only:'This project only', search_prompt:'Search prompts...',
+    msg_settings_saved:'Settings saved', msg_settings_save_failed:'Failed to save settings',
+    msg_prompt_required:'Please enter a prompt.', msg_task_sent:'Task has been sent.',
+    msg_send_failed:'Send failed', msg_upload_failed:'Upload failed',
+    msg_file_read_failed:'File read failed',
+    msg_copy_done:'Result copied to clipboard.', msg_copy_failed:'Failed to copy to clipboard.',
+    msg_copy_no_result:'No result to copy.', msg_copy_no_text:'No text result to copy.',
+    msg_job_deleted:'Job deleted.', msg_delete_failed:'Delete failed',
+    msg_batch_deleted:' completed jobs deleted.', msg_batch_delete_failed:'Batch delete failed',
+    msg_connected:'Connected to local server', msg_disconnected:'Disconnected',
+    msg_session_select:'Session selected',
+    msg_fork_mode:'Switched to Fork mode', msg_fork_input:'Enter a new prompt.',
+    msg_continue_input:'Enter a command to continue.',
+    msg_no_session_id:'Cannot continue: no session ID.',
+    msg_continue_sent:'Continue command sent.',
+    msg_no_original_prompt:'Original prompt not found.',
+    msg_rerun_done:'Re-run with the same prompt.', msg_rerun_failed:'Re-run failed',
+    msg_refresh_done:'Fully refreshed',
+    msg_service_start:'Service start requested', msg_service_stop:'Service stop requested',
+    msg_service_restart:'Service restart requested', msg_service_failed:'Service request failed',
+    status_running:'Running', status_done:'Done', status_failed:'Failed', status_pending:'Pending',
+    no_jobs:'No jobs', connected_to:'Connected',
+  },
+  ja: {
+    title:'Controller Service', send_task:'新しいタスク送信', prompt:'プロンプト',
+    prompt_placeholder:'Claudeに送信するコマンドを入力... (ファイル/画像のドラッグ＆ドロップ可能)',
+    drop_files:'ここにファイルをドロップ', select_directory:'ディレクトリを選択...',
+    browse_directory:'ディレクトリ参照', reset:'リセット', send:'送信',
+    job_list:'ジョブ一覧', status:'ステータス', folder:'フォルダ', created_at:'作成日時',
+    delete_completed:'完了を削除', loading_jobs:'ジョブ一覧を読み込み中...',
+    local_server_connection:'ローカルサーバー接続', server_address:'サーバーアドレス',
+    server_address_desc:'ローカルで実行中のControllerサーバーアドレス',
+    auth_token:'認証トークン', auth_token_desc:'サーバー起動時にターミナルに表示されるAuth Token',
+    disconnect:'切断', connect:'接続', settings:'設定',
+    language_settings:'言語設定', display_language:'表示言語',
+    display_language_desc:'インターフェースの表示言語を選択します',
+    close:'閉じる', save:'保存', select_session:'セッション選択',
+    this_project_only:'このプロジェクトのみ', search_prompt:'プロンプト検索...',
+    msg_settings_saved:'設定が保存されました', msg_settings_save_failed:'設定の保存に失敗',
+    msg_prompt_required:'プロンプトを入力してください。', msg_task_sent:'タスクが送信されました。',
+    msg_send_failed:'送信失敗', msg_upload_failed:'アップロード失敗',
+    msg_file_read_failed:'ファイル読み取り失敗',
+    msg_copy_done:'結果がクリップボードにコピーされました。', msg_copy_failed:'クリップボードへのコピーに失敗。',
+    msg_copy_no_result:'コピーする結果がありません。', msg_copy_no_text:'コピーするテキスト結果がありません。',
+    msg_job_deleted:'ジョブが削除されました。', msg_delete_failed:'削除失敗',
+    msg_batch_deleted:'件の完了ジョブが削除されました。', msg_batch_delete_failed:'一括削除失敗',
+    msg_connected:'ローカルサーバーに接続しました', msg_disconnected:'切断されました',
+    msg_session_select:'セッション選択',
+    msg_fork_mode:'Forkモードに切り替えました', msg_fork_input:'新しいプロンプトを入力してください。',
+    msg_continue_input:'続行するコマンドを入力してください。',
+    msg_no_session_id:'セッションIDがないため続行できません。',
+    msg_continue_sent:'セッション続行コマンドが送信されました。',
+    msg_no_original_prompt:'元のプロンプトが見つかりません。',
+    msg_rerun_done:'同じプロンプトで再実行しました。', msg_rerun_failed:'再実行失敗',
+    msg_refresh_done:'全体リフレッシュ完了',
+    msg_service_start:'サービス開始を要求', msg_service_stop:'サービス停止を要求',
+    msg_service_restart:'サービス再起動を要求', msg_service_failed:'サービスリクエスト失敗',
+    status_running:'実行中', status_done:'完了', status_failed:'失敗', status_pending:'待機中',
+    no_jobs:'ジョブがありません', connected_to:'接続済み',
+  },
+  'zh-CN': {
+    title:'Controller Service', send_task:'发送任务', prompt:'提示词',
+    prompt_placeholder:'输入要发送给Claude的指令... (可拖放或粘贴文件/图片)',
+    drop_files:'将文件拖放到此处', select_directory:'选择目录...',
+    browse_directory:'浏览目录', reset:'重置', send:'发送',
+    job_list:'任务列表', status:'状态', folder:'文件夹', created_at:'创建时间',
+    delete_completed:'删除已完成', loading_jobs:'正在加载任务列表...',
+    local_server_connection:'本地服务器连接', server_address:'服务器地址',
+    server_address_desc:'本地运行的Controller服务器地址',
+    auth_token:'认证令牌', auth_token_desc:'服务器启动时在终端显示的Auth Token',
+    disconnect:'断开连接', connect:'连接', settings:'设置',
+    language_settings:'语言设置', display_language:'显示语言',
+    display_language_desc:'选择界面显示的语言',
+    close:'关闭', save:'保存', select_session:'选择会话',
+    this_project_only:'仅此项目', search_prompt:'搜索提示词...',
+    msg_settings_saved:'设置已保存', msg_settings_save_failed:'保存设置失败',
+    msg_prompt_required:'请输入提示词。', msg_task_sent:'任务已发送。',
+    msg_send_failed:'发送失败', msg_upload_failed:'上传失败',
+    msg_file_read_failed:'文件读取失败',
+    msg_copy_done:'结果已复制到剪贴板。', msg_copy_failed:'复制到剪贴板失败。',
+    msg_copy_no_result:'没有可复制的结果。', msg_copy_no_text:'没有可复制的文本结果。',
+    msg_job_deleted:'任务已删除。', msg_delete_failed:'删除失败',
+    msg_batch_deleted:'个已完成任务已删除。', msg_batch_delete_failed:'批量删除失败',
+    msg_connected:'已连接到本地服务器', msg_disconnected:'已断开连接',
+    msg_session_select:'已选择会话',
+    msg_fork_mode:'已切换到Fork模式', msg_fork_input:'请输入新的提示词。',
+    msg_continue_input:'请输入继续执行的命令。', msg_no_session_id:'没有会话ID，无法继续。',
+    msg_continue_sent:'会话继续命令已发送。', msg_no_original_prompt:'找不到原始提示词。',
+    msg_rerun_done:'已使用相同提示词重新执行。', msg_rerun_failed:'重新执行失败',
+    msg_refresh_done:'全部刷新完成',
+    msg_service_start:'服务启动请求已完成', msg_service_stop:'服务停止请求已完成',
+    msg_service_restart:'服务重启请求已完成', msg_service_failed:'服务请求失败',
+    status_running:'运行中', status_done:'完成', status_failed:'失败', status_pending:'等待中',
+    no_jobs:'没有任务', connected_to:'已连接',
+  },
+  'zh-TW': {
+    title:'Controller Service', send_task:'傳送任務', prompt:'提示詞',
+    prompt_placeholder:'輸入要傳送給Claude的指令... (可拖放或貼上檔案/圖片)',
+    drop_files:'將檔案拖放到此處', select_directory:'選擇目錄...',
+    browse_directory:'瀏覽目錄', reset:'重設', send:'傳送',
+    job_list:'任務列表', status:'狀態', folder:'資料夾', created_at:'建立時間',
+    delete_completed:'刪除已完成', loading_jobs:'正在載入任務列表...',
+    local_server_connection:'本機伺服器連線', server_address:'伺服器位址',
+    server_address_desc:'本機執行的Controller伺服器位址',
+    auth_token:'認證權杖', auth_token_desc:'伺服器啟動時在終端顯示的Auth Token',
+    disconnect:'斷開連線', connect:'連線', settings:'設定',
+    language_settings:'語言設定', display_language:'顯示語言',
+    display_language_desc:'選擇介面顯示的語言',
+    close:'關閉', save:'儲存', select_session:'選擇工作階段',
+    this_project_only:'僅此專案', search_prompt:'搜尋提示詞...',
+    msg_settings_saved:'設定已儲存', msg_settings_save_failed:'儲存設定失敗',
+    msg_prompt_required:'請輸入提示詞。', msg_task_sent:'任務已傳送。',
+    msg_send_failed:'傳送失敗', msg_upload_failed:'上傳失敗',
+    msg_file_read_failed:'檔案讀取失敗',
+    msg_copy_done:'結果已複製到剪貼簿。', msg_copy_failed:'複製到剪貼簿失敗。',
+    msg_copy_no_result:'沒有可複製的結果。', msg_copy_no_text:'沒有可複製的文字結果。',
+    msg_job_deleted:'任務已刪除。', msg_delete_failed:'刪除失敗',
+    msg_batch_deleted:'個已完成任務已刪除。', msg_batch_delete_failed:'批次刪除失敗',
+    msg_connected:'已連線到本機伺服器', msg_disconnected:'已斷開連線',
+    msg_session_select:'已選擇工作階段',
+    msg_fork_mode:'已切換到Fork模式', msg_fork_input:'請輸入新的提示詞。',
+    msg_continue_input:'請輸入繼續執行的命令。', msg_no_session_id:'沒有工作階段ID，無法繼續。',
+    msg_continue_sent:'工作階段繼續命令已傳送。', msg_no_original_prompt:'找不到原始提示詞。',
+    msg_rerun_done:'已使用相同提示詞重新執行。', msg_rerun_failed:'重新執行失敗',
+    msg_refresh_done:'全部重新整理完成',
+    msg_service_start:'服務啟動請求已完成', msg_service_stop:'服務停止請求已完成',
+    msg_service_restart:'服務重新啟動請求已完成', msg_service_failed:'服務請求失敗',
+    status_running:'執行中', status_done:'完成', status_failed:'失敗', status_pending:'等待中',
+    no_jobs:'沒有任務', connected_to:'已連線',
+  },
+  es: {
+    title:'Controller Service', send_task:'Enviar Tarea', prompt:'Prompt',
+    prompt_placeholder:'Ingrese un comando para Claude... (arrastre o pegue archivos/imágenes)',
+    drop_files:'Suelte archivos aquí', select_directory:'Seleccionar directorio...',
+    browse_directory:'Explorar Directorio', reset:'Restablecer', send:'Enviar',
+    job_list:'Lista de Tareas', status:'Estado', folder:'Carpeta', created_at:'Creado',
+    delete_completed:'Eliminar completadas', loading_jobs:'Cargando lista de tareas...',
+    local_server_connection:'Conexión al Servidor Local', server_address:'Dirección del Servidor',
+    server_address_desc:'Dirección del servidor Controller local',
+    auth_token:'Token de Autenticación', auth_token_desc:'Token mostrado en la terminal al iniciar',
+    disconnect:'Desconectar', connect:'Conectar', settings:'Configuración',
+    language_settings:'Idioma', display_language:'Idioma de Interfaz',
+    display_language_desc:'Seleccione el idioma de la interfaz',
+    close:'Cerrar', save:'Guardar', select_session:'Seleccionar Sesión',
+    this_project_only:'Solo este proyecto', search_prompt:'Buscar prompts...',
+    msg_settings_saved:'Configuración guardada', msg_settings_save_failed:'Error al guardar',
+    msg_prompt_required:'Ingrese un prompt.', msg_task_sent:'Tarea enviada.',
+    msg_send_failed:'Error al enviar', msg_upload_failed:'Error al subir',
+    msg_file_read_failed:'Error al leer archivo',
+    msg_copy_done:'Resultado copiado.', msg_copy_failed:'Error al copiar.',
+    msg_copy_no_result:'No hay resultado.', msg_copy_no_text:'No hay texto.',
+    msg_job_deleted:'Tarea eliminada.', msg_delete_failed:'Error al eliminar',
+    msg_batch_deleted:' tareas eliminadas.', msg_batch_delete_failed:'Error en eliminación masiva',
+    msg_connected:'Conectado al servidor local', msg_disconnected:'Desconectado',
+    msg_session_select:'Sesión seleccionada',
+    msg_fork_mode:'Modo Fork activado', msg_fork_input:'Ingrese un nuevo prompt.',
+    msg_continue_input:'Ingrese un comando para continuar.',
+    msg_no_session_id:'Sin ID de sesión.', msg_continue_sent:'Comando de continuación enviado.',
+    msg_no_original_prompt:'Prompt original no encontrado.',
+    msg_rerun_done:'Re-ejecutado.', msg_rerun_failed:'Error al re-ejecutar',
+    msg_refresh_done:'Actualización completa',
+    msg_service_start:'Servicio iniciado', msg_service_stop:'Servicio detenido',
+    msg_service_restart:'Servicio reiniciado', msg_service_failed:'Error de servicio',
+    status_running:'Ejecutando', status_done:'Completado', status_failed:'Fallido', status_pending:'Pendiente',
+    no_jobs:'Sin tareas', connected_to:'Conectado',
+  },
+  fr: {
+    title:'Controller Service', send_task:'Envoyer une Tâche', prompt:'Prompt',
+    prompt_placeholder:'Entrez une commande pour Claude... (glisser-déposer ou coller fichiers/images)',
+    drop_files:'Déposez les fichiers ici', select_directory:'Sélectionner un répertoire...',
+    browse_directory:'Parcourir', reset:'Réinitialiser', send:'Envoyer',
+    job_list:'Liste des Tâches', status:'Statut', folder:'Dossier', created_at:'Créé le',
+    delete_completed:'Supprimer terminées', loading_jobs:'Chargement...',
+    local_server_connection:'Connexion au Serveur Local', server_address:'Adresse du Serveur',
+    server_address_desc:'Adresse du serveur Controller local',
+    auth_token:'Jeton d\'Authentification', auth_token_desc:'Jeton affiché au démarrage du serveur',
+    disconnect:'Déconnecter', connect:'Connecter', settings:'Paramètres',
+    language_settings:'Langue', display_language:'Langue d\'Affichage',
+    display_language_desc:'Sélectionnez la langue de l\'interface',
+    close:'Fermer', save:'Enregistrer', select_session:'Sélectionner une Session',
+    this_project_only:'Ce projet uniquement', search_prompt:'Rechercher...',
+    msg_settings_saved:'Paramètres enregistrés', msg_settings_save_failed:'Échec de l\'enregistrement',
+    msg_prompt_required:'Veuillez entrer un prompt.', msg_task_sent:'Tâche envoyée.',
+    msg_send_failed:'Échec de l\'envoi', msg_upload_failed:'Échec du téléchargement',
+    msg_file_read_failed:'Échec de la lecture',
+    msg_copy_done:'Résultat copié.', msg_copy_failed:'Échec de la copie.',
+    msg_copy_no_result:'Aucun résultat.', msg_copy_no_text:'Aucun texte.',
+    msg_job_deleted:'Tâche supprimée.', msg_delete_failed:'Échec de la suppression',
+    msg_batch_deleted:' tâches supprimées.', msg_batch_delete_failed:'Échec de la suppression groupée',
+    msg_connected:'Connecté au serveur local', msg_disconnected:'Déconnecté',
+    msg_session_select:'Session sélectionnée',
+    msg_fork_mode:'Mode Fork activé', msg_fork_input:'Entrez un nouveau prompt.',
+    msg_continue_input:'Entrez une commande pour continuer.',
+    msg_no_session_id:'Pas d\'ID de session.', msg_continue_sent:'Commande de continuation envoyée.',
+    msg_no_original_prompt:'Prompt original introuvable.',
+    msg_rerun_done:'Re-exécuté.', msg_rerun_failed:'Échec de la re-exécution',
+    msg_refresh_done:'Rafraîchissement complet',
+    msg_service_start:'Démarrage du service', msg_service_stop:'Arrêt du service',
+    msg_service_restart:'Redémarrage du service', msg_service_failed:'Échec du service',
+    status_running:'En cours', status_done:'Terminé', status_failed:'Échoué', status_pending:'En attente',
+    no_jobs:'Aucune tâche', connected_to:'Connecté',
+  },
+  de: {
+    title:'Controller Service', send_task:'Aufgabe senden', prompt:'Prompt',
+    prompt_placeholder:'Befehl für Claude eingeben... (Dateien/Bilder per Drag & Drop)',
+    drop_files:'Dateien hier ablegen', select_directory:'Verzeichnis auswählen...',
+    browse_directory:'Verzeichnis durchsuchen', reset:'Zurücksetzen', send:'Senden',
+    job_list:'Aufgabenliste', status:'Status', folder:'Ordner', created_at:'Erstellt',
+    delete_completed:'Erledigte löschen', loading_jobs:'Laden...',
+    local_server_connection:'Lokale Serververbindung', server_address:'Serveradresse',
+    server_address_desc:'Adresse des lokalen Controller-Servers',
+    auth_token:'Auth-Token', auth_token_desc:'Auth Token beim Serverstart im Terminal',
+    disconnect:'Trennen', connect:'Verbinden', settings:'Einstellungen',
+    language_settings:'Sprache', display_language:'Anzeigesprache',
+    display_language_desc:'Sprache der Benutzeroberfläche auswählen',
+    close:'Schließen', save:'Speichern', select_session:'Sitzung auswählen',
+    this_project_only:'Nur dieses Projekt', search_prompt:'Prompts suchen...',
+    msg_settings_saved:'Einstellungen gespeichert', msg_settings_save_failed:'Speichern fehlgeschlagen',
+    msg_prompt_required:'Bitte Prompt eingeben.', msg_task_sent:'Aufgabe gesendet.',
+    msg_send_failed:'Senden fehlgeschlagen', msg_upload_failed:'Upload fehlgeschlagen',
+    msg_file_read_failed:'Datei lesen fehlgeschlagen',
+    msg_copy_done:'Ergebnis kopiert.', msg_copy_failed:'Kopieren fehlgeschlagen.',
+    msg_copy_no_result:'Kein Ergebnis.', msg_copy_no_text:'Kein Text.',
+    msg_job_deleted:'Aufgabe gelöscht.', msg_delete_failed:'Löschen fehlgeschlagen',
+    msg_batch_deleted:' Aufgaben gelöscht.', msg_batch_delete_failed:'Massenlöschung fehlgeschlagen',
+    msg_connected:'Mit Server verbunden', msg_disconnected:'Verbindung getrennt',
+    msg_session_select:'Sitzung ausgewählt',
+    msg_fork_mode:'Fork-Modus aktiviert', msg_fork_input:'Neuen Prompt eingeben.',
+    msg_continue_input:'Befehl zum Fortfahren eingeben.',
+    msg_no_session_id:'Keine Sitzungs-ID.', msg_continue_sent:'Fortsetzungsbefehl gesendet.',
+    msg_no_original_prompt:'Ursprünglicher Prompt nicht gefunden.',
+    msg_rerun_done:'Erneut ausgeführt.', msg_rerun_failed:'Erneute Ausführung fehlgeschlagen',
+    msg_refresh_done:'Vollständig aktualisiert',
+    msg_service_start:'Dienststart angefordert', msg_service_stop:'Dienststopp angefordert',
+    msg_service_restart:'Dienstneustart angefordert', msg_service_failed:'Dienstanforderung fehlgeschlagen',
+    status_running:'Läuft', status_done:'Fertig', status_failed:'Fehlgeschlagen', status_pending:'Wartend',
+    no_jobs:'Keine Aufgaben', connected_to:'Verbunden',
+  },
+};
+
+let _currentLocale = localStorage.getItem('ctrl_locale') || 'ko';
+
+function t(key) {
+  const dict = I18N[_currentLocale] || I18N['ko'];
+  return dict[key] || I18N['ko'][key] || key;
+}
+
+function applyI18n() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    const text = t(key);
+    if (text) el.textContent = text;
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    const key = el.getAttribute('data-i18n-placeholder');
+    const text = t(key);
+    if (text) el.placeholder = text;
+  });
+  document.documentElement.lang = _currentLocale.split('-')[0];
+  document.documentElement.setAttribute('data-locale', _currentLocale);
+}
+
+function setLocale(locale) {
+  if (!I18N[locale]) return;
+  _currentLocale = locale;
+  localStorage.setItem('ctrl_locale', locale);
+  applyI18n();
+}
+
+function onLocaleChange() {
+  const sel = document.getElementById('cfgLocale');
+  if (sel) setLocale(sel.value);
+}
+
 // ── Settings ──
 let _settingsData = {};
-let _settingsDirty = false;
 
 function openSettings() {
   loadSettings().then(() => {
@@ -1431,13 +1760,11 @@ function openSettings() {
 
 function closeSettings() {
   document.getElementById('settingsOverlay').classList.remove('open');
-  _settingsDirty = false;
-  document.getElementById('settingsRestartHint').style.display = 'none';
 }
 
 async function loadSettings() {
   try {
-    const resp = await fetch(API + '/api/config');
+    const resp = await apiFetch('/api/config');
     _settingsData = await resp.json();
   } catch {
     _settingsData = {};
@@ -1447,48 +1774,22 @@ async function loadSettings() {
 
 function _populateSettingsUI() {
   const d = _settingsData;
-  document.getElementById('cfgSkipPerms').checked = d.skip_permissions !== false;
-  document.getElementById('cfgAllowedTools').value = d.allowed_tools || '';
-  document.getElementById('cfgModel').value = d.model || '';
-  document.getElementById('cfgMaxJobs').value = d.max_jobs || 10;
-  document.getElementById('cfgSystemPrompt').value = d.append_system_prompt || '';
-  document.getElementById('cfgTargetRepo').value = d.target_repo || '';
-  document.getElementById('cfgBaseBranch').value = d.base_branch || 'main';
-  document.getElementById('cfgCheckpointInterval').value = d.checkpoint_interval || 5;
-  _updateAllowedToolsVisibility();
-}
-
-function _updateAllowedToolsVisibility() {
-  const skip = document.getElementById('cfgSkipPerms').checked;
-  document.getElementById('rowAllowedTools').style.display = skip ? 'none' : 'flex';
-}
-
-function onSettingChange() {
-  _settingsDirty = true;
-  document.getElementById('settingsRestartHint').style.display = 'flex';
-  _updateAllowedToolsVisibility();
+  const sel = document.getElementById('cfgLocale');
+  if (sel) sel.value = d.locale || _currentLocale;
 }
 
 async function saveSettings() {
-  const payload = {
-    skip_permissions: document.getElementById('cfgSkipPerms').checked,
-    allowed_tools: document.getElementById('cfgAllowedTools').value.trim(),
-    model: document.getElementById('cfgModel').value.trim(),
-    max_jobs: parseInt(document.getElementById('cfgMaxJobs').value) || 10,
-    append_system_prompt: document.getElementById('cfgSystemPrompt').value,
-    target_repo: document.getElementById('cfgTargetRepo').value.trim(),
-    base_branch: document.getElementById('cfgBaseBranch').value.trim() || 'main',
-    checkpoint_interval: parseInt(document.getElementById('cfgCheckpointInterval').value) || 5,
-  };
+  const locale = document.getElementById('cfgLocale').value;
+  const payload = { locale };
   try {
     await apiFetch('/api/config', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
-    showToast('설정이 저장되었습니다');
-    _settingsDirty = false;
+    setLocale(locale);
+    showToast(t('msg_settings_saved'));
   } catch (e) {
-    showToast('설정 저장 실패: ' + e.message, 'error');
+    showToast(t('msg_settings_save_failed') + ': ' + e.message, 'error');
   }
 }
 

@@ -11,5 +11,8 @@ service/*.pid
 # Python
 __pycache__/
 
+# Vercel
+.vercel/
+
 # OS
 .DS_Store
