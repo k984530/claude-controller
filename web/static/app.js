@@ -362,10 +362,10 @@ async function serviceAction(action) {
     } else {
       await apiFetch(`/api/service/${action}`, { method: 'POST' });
     }
-    showToast(`서비스 ${action === 'start' ? '시작' : action === 'stop' ? '중지' : '재시작'} 요청 완료`);
+    showToast(t(action === 'start' ? 'msg_service_start' : action === 'stop' ? 'msg_service_stop' : 'msg_service_restart'));
     setTimeout(checkStatus, 1000);
   } catch (err) {
-    showToast(`서비스 ${action} 실패: ${err.message}`, 'error');
+    showToast(`${t('msg_service_failed')}: ${err.message}`, 'error');
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -417,7 +417,7 @@ async function uploadFile(file) {
         reject(err);
       }
     };
-    reader.onerror = () => reject(new Error('파일 읽기 실패'));
+    reader.onerror = () => reject(new Error(t('msg_file_read_failed')));
     reader.readAsDataURL(file);
   });
 }
@@ -487,7 +487,7 @@ async function handleFiles(files) {
       const ta = document.getElementById('promptInput');
       insertAtCursor(ta, `@image${tempIdx}`);
     } catch (err) {
-      showToast(`업로드 실패: ${escapeHtml(file.name)} — ${err.message}`, 'error');
+      showToast(`${t('msg_upload_failed')}: ${escapeHtml(file.name)} — ${err.message}`, 'error');
       attachments[tempIdx] = null;
       thumb.remove();
       updateAttachBadge();
@@ -1076,7 +1076,7 @@ async function deleteJob(jobId) {
     showToast(t('msg_job_deleted'));
     fetchJobs();
   } catch (err) {
-    showToast(`제거 실패: ${err.message}`, 'error');
+    showToast(`${t('msg_delete_failed')}: ${err.message}`, 'error');
   }
 }
 
@@ -1092,10 +1092,10 @@ async function deleteCompletedJobs() {
       }
       if (expandedJobId === id) expandedJobId = null;
     }
-    showToast(`${count}개 완료 작업이 제거되었습니다.`);
+    showToast(count + t('msg_batch_deleted'));
     fetchJobs();
   } catch (err) {
-    showToast(`일괄 제거 실패: ${err.message}`, 'error');
+    showToast(`${t('msg_batch_delete_failed')}: ${err.message}`, 'error');
   }
 }
 
@@ -1301,7 +1301,7 @@ function clearDirSelection() {
   document.getElementById('cwdInput').value = '';
   updateCwdBadge('');
   const text = document.getElementById('dirPickerText');
-  text.textContent = '디렉토리를 선택하세요...';
+  text.textContent = t('select_directory');
   document.getElementById('dirPickerDisplay').classList.remove('has-value');
   document.getElementById('dirPickerClear').classList.remove('visible');
   renderRecentDirs();
@@ -1346,15 +1346,16 @@ async function autoConnect() {
   if (connFab) {
     if (_backendConnected) {
       connFab.classList.add('connected');
-      connFab.title = '로컬 서버 연결됨';
+      connFab.title = t('msg_connected');
     } else {
       connFab.classList.remove('connected');
-      connFab.title = '로컬 서버 연결 안됨 — 서버를 시작하세요';
+      connFab.title = t('msg_disconnected');
     }
   }
 }
 
 async function init() {
+  applyI18n();
   await autoConnect();
   loadRecentDirs();
   checkStatus();
@@ -1798,7 +1799,7 @@ async function retryConnect() {
   showToast('로컬 서버 연결 시도 중...', 'success');
   await autoConnect();
   if (_backendConnected) {
-    showToast('로컬 서버에 연결되었습니다');
+    showToast(t('msg_connected'));
     checkStatus();
     fetchJobs();
   } else {

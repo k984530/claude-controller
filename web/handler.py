@@ -676,6 +676,7 @@ class ControllerHandler(http.server.BaseHTTPRequestHandler):
             "target_repo": "",
             "base_branch": "main",
             "checkpoint_interval": 5,
+            "locale": "ko",
         }
         try:
             if SETTINGS_FILE.exists():
@@ -700,7 +701,7 @@ class ControllerHandler(http.server.BaseHTTPRequestHandler):
         allowed_keys = {
             "skip_permissions", "allowed_tools", "model", "max_jobs",
             "append_system_prompt", "target_repo", "base_branch",
-            "checkpoint_interval",
+            "checkpoint_interval", "locale",
         }
         for k, v in body.items():
             if k in allowed_keys:
