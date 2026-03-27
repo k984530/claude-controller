@@ -58,25 +58,6 @@ function renderPromptHtml(prompt) {
   });
 }
 
-function updatePromptMirror() {
-  const ta = document.getElementById('promptInput');
-  const mirror = document.getElementById('promptMirror');
-  if (!ta || !mirror) return;
-  const val = ta.value;
-  if (!val) {
-    mirror.innerHTML = '';
-    return;
-  }
-  const escaped = escapeHtml(val);
-  const chipIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>';
-  const html = escaped.replace(/@(\/[^\s,]+|image\d+)/g, (match, ref) => {
-    const label = ref.startsWith('image') ? ref : ref.split('/').pop();
-    return `<span class="prompt-img-chip" title="${escapeHtml('@' + ref)}">${chipIcon}${escapeHtml(label)}</span>`;
-  });
-  mirror.innerHTML = html + '\n';
-  mirror.scrollTop = ta.scrollTop;
-}
-
 function formatTime(ts) {
   if (!ts) return '-';
   try {
@@ -432,11 +413,15 @@ function updatePromptMirror() {
   if (!val) { mirror.innerHTML = ''; return; }
   const escaped = escapeHtml(val);
   const chipIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>';
-  mirror.innerHTML = escaped.replace(/@image(\d+)/g, (match, idx) => {
-    const att = attachments[parseInt(idx)];
-    const label = att ? (att.filename || match) : match;
+  mirror.innerHTML = escaped.replace(/@(\/[^\s,]+|image(\d+))/g, (match, ref, idx) => {
+    if (idx !== undefined) {
+      const att = attachments[parseInt(idx)];
+      const label = att ? (att.filename || match) : match;
+      return `<span class="prompt-img-chip" title="${escapeHtml(match)}">${chipIcon}${escapeHtml(label)}</span>`;
+    }
+    const label = ref.split('/').pop();
     return `<span class="prompt-img-chip" title="${escapeHtml(match)}">${chipIcon}${escapeHtml(label)}</span>`;
-  });
+  }) + '\n';
   mirror.scrollTop = ta.scrollTop;
 }
 
@@ -968,7 +953,7 @@ function toggleJobExpand(id) {
 }
 
 // ── Stream Polling ──
-// ── 실행 중 작업 미리보기 갱신 (마지막 2줄) ──
+// ── 실행 중 작업 미리보기 갱신 (마지막 2줄, stream-content 스타일) ──
 function updateJobPreview(jobId) {
   const el = document.getElementById(`jobPreview-${jobId}`);
   if (!el) return;
@@ -976,20 +961,24 @@ function updateJobPreview(jobId) {
   const state = streamState[jobId];
   if (!state || state.events.length === 0) return;
 
-  // 마지막 2개 이벤트에서 텍스트 추출
+  // 마지막 2개 이벤트에서 스트림 이벤트 형식으로 렌더링
   const recent = state.events.slice(-2);
   const lines = recent.map(evt => {
     if (evt.type === 'tool_use') {
-      return `<span class="preview-tool">${escapeHtml(evt.tool || 'Tool')}</span> ${escapeHtml((typeof evt.input === 'string' ? evt.input : JSON.stringify(evt.input || '')).slice(0, 120))}`;
+      const input = escapeHtml((typeof evt.input === 'string' ? evt.input : JSON.stringify(evt.input || '')).slice(0, 150));
+      return `<div class="preview-line"><span class="preview-tool">${escapeHtml(evt.tool || 'Tool')}</span>${input}</div>`;
     }
     if (evt.type === 'result') {
-      return escapeHtml((typeof evt.result === 'string' ? evt.result : '').slice(0, 120));
+      const text = (typeof evt.result === 'string' ? evt.result : '').slice(0, 150);
+      return `<div class="preview-line preview-result">${escapeHtml(text)}</div>`;
     }
-    return escapeHtml((evt.text || '').split('\n').pop().slice(0, 120));
+    const text = (evt.text || '').split('\n').pop().slice(0, 150);
+    if (!text) return '';
+    return `<div class="preview-line">${escapeHtml(text)}</div>`;
   }).filter(Boolean);
 
   if (lines.length > 0) {
-    el.innerHTML = `<div class="preview-lines">${lines.map(l => `<div class="preview-line">${l}</div>`).join('')}</div>`;
+    el.innerHTML = `<div class="preview-lines">${lines.join('')}</div>`;
   }
 }
 
