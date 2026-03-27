@@ -2,23 +2,11 @@
    Controller Service Dashboard — Vanilla JS
    ═══════════════════════════════════════════════ */
 
-// ── 연결 설정 (localStorage에 저장) ──
-function _loadConnection() {
-  return {
-    api:   localStorage.getItem('ctrl_api_url') || '',
-    token: localStorage.getItem('ctrl_auth_token') || '',
-  };
-}
-function _saveConnection(api, token) {
-  localStorage.setItem('ctrl_api_url', api);
-  localStorage.setItem('ctrl_auth_token', token);
-}
-function isRemoteMode() {
-  return !!_loadConnection().api;
-}
-
-let API = _loadConnection().api;   // '' = same origin, 또는 'https://localhost:8420'
-let AUTH_TOKEN = _loadConnection().token;
+// ── 자동 연결 설정 ──
+const LOCAL_BACKEND = 'http://localhost:8420';
+let API = '';          // same-origin이면 '', 원격이면 LOCAL_BACKEND
+let AUTH_TOKEN = '';   // 토큰 (선택적)
+let _backendConnected = false;
 let expandedJobId = null;
 let jobPollTimer = null;
 let serviceRunning = null;
@@ -339,11 +327,6 @@ async function apiFetch(path, options = {}) {
   }
   try {
     const resp = await fetch(`${API}${path}`, { ...options, headers });
-    if (resp.status === 401) {
-      // 토큰 만료/잘못됨 — 연결 설정 모달 표시
-      openConnectionModal('토큰이 유효하지 않습니다. 다시 입력해주세요.');
-      throw new Error('Unauthorized');
-    }
     if (!resp.ok) {
       const text = await resp.text().catch(() => '');
       throw new Error(text || `HTTP ${resp.status}`);
@@ -352,9 +335,6 @@ async function apiFetch(path, options = {}) {
     if (ct.includes('application/json')) return resp.json();
     return resp.text();
   } catch (err) {
-    if (err.message === 'Failed to fetch' && isRemoteMode()) {
-      openConnectionModal('로컬 서버에 연결할 수 없습니다. 주소와 토큰을 확인해주세요.');
-    }
     throw err;
   }
 }
@@ -1342,18 +1322,40 @@ function refreshAll() {
 }
 
 // ── Initialize ──
-function init() {
-  // 연결 FAB 상태 업데이트
+async function autoConnect() {
   const connFab = document.getElementById('connFab');
-  if (connFab) {
-    if (isRemoteMode() && AUTH_TOKEN) {
-      connFab.classList.add('connected');
-      connFab.title = '연결됨: ' + API;
-    } else {
-      connFab.classList.remove('connected');
+  const isSameOrigin = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+
+  if (isSameOrigin) {
+    // 로컬 서빙 — same-origin 모드
+    API = '';
+    _backendConnected = true;
+  } else {
+    // 원격 배포 (claude.won-space.com 등) — localhost 자동 감지
+    try {
+      const resp = await fetch(`${LOCAL_BACKEND}/api/status`, { signal: AbortSignal.timeout(3000) });
+      if (resp.ok) {
+        API = LOCAL_BACKEND;
+        _backendConnected = true;
+      }
+    } catch {
+      _backendConnected = false;
     }
   }
 
+  if (connFab) {
+    if (_backendConnected) {
+      connFab.classList.add('connected');
+      connFab.title = '로컬 서버 연결됨';
+    } else {
+      connFab.classList.remove('connected');
+      connFab.title = '로컬 서버 연결 안됨 — 서버를 시작하세요';
+    }
+  }
+}
+
+async function init() {
+  await autoConnect();
   loadRecentDirs();
   checkStatus();
   fetchJobs();
@@ -1490,77 +1492,17 @@ async function saveSettings() {
   }
 }
 
-// ══════════════════════════════════════════════════
-//  연결 설정 모달 (Connection Setup)
-// ══════════════════════════════════════════════════
-
-function openConnectionModal(message) {
-  const modal = document.getElementById('connectionModal');
-  if (!modal) return;
-  const conn = _loadConnection();
-  document.getElementById('connApiUrl').value = conn.api || 'https://localhost:8420';
-  document.getElementById('connToken').value = conn.token;
-  const msgEl = document.getElementById('connMessage');
-  if (msgEl) {
-    msgEl.textContent = message || '';
-    msgEl.style.display = message ? 'block' : 'none';
+// ── 연결 재시도 (FAB 클릭 시) ──
+async function retryConnect() {
+  showToast('로컬 서버 연결 시도 중...', 'success');
+  await autoConnect();
+  if (_backendConnected) {
+    showToast('로컬 서버에 연결되었습니다');
+    checkStatus();
+    fetchJobs();
+  } else {
+    showToast('로컬 서버에 연결할 수 없습니다. 서버가 실행 중인지 확인하세요.', 'error');
   }
-  modal.classList.add('open');
-}
-
-function closeConnectionModal() {
-  const modal = document.getElementById('connectionModal');
-  if (modal) modal.classList.remove('open');
-}
-
-async function connectToBackend() {
-  const apiUrl = document.getElementById('connApiUrl').value.trim().replace(/\/+$/, '');
-  const token = document.getElementById('connToken').value.trim();
-  const msgEl = document.getElementById('connMessage');
-
-  if (!token) {
-    if (msgEl) { msgEl.textContent = '토큰을 입력해주세요.'; msgEl.style.display = 'block'; }
-    return;
-  }
-
-  // 토큰 검증
-  try {
-    const resp = await fetch(`${apiUrl}/api/auth/verify`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-    });
-    const data = await resp.json();
-    if (!data.valid) {
-      if (msgEl) { msgEl.textContent = '토큰이 유효하지 않습니다.'; msgEl.style.display = 'block'; }
-      return;
-    }
-  } catch (e) {
-    if (msgEl) {
-      msgEl.textContent = `서버에 연결할 수 없습니다: ${e.message}`;
-      msgEl.style.display = 'block';
-    }
-    return;
-  }
-
-  // 성공 — 저장 후 새로고침
-  _saveConnection(apiUrl, token);
-  API = apiUrl;
-  AUTH_TOKEN = token;
-  closeConnectionModal();
-  showToast('로컬 서버에 연결되었습니다');
-  init();
-}
-
-function disconnectBackend() {
-  _saveConnection('', '');
-  API = '';
-  AUTH_TOKEN = '';
-  closeConnectionModal();
-  showToast('연결이 해제되었습니다');
-  init();
 }
 
 init();

@@ -21,7 +21,7 @@ from config import (
     RECENT_DIRS_FILE, SETTINGS_FILE, SESSIONS_DIR,
     CLAUDE_PROJECTS_DIR, FIFO_PATH,
     ALLOWED_ORIGINS, ALLOWED_HOSTS,
-    AUTH_EXEMPT_PREFIXES, AUTH_EXEMPT_PATHS,
+    AUTH_REQUIRED, AUTH_EXEMPT_PREFIXES, AUTH_EXEMPT_PATHS,
 )
 from utils import parse_meta_file, is_service_running, cwd_to_project_dir, scan_claude_sessions
 from jobs import get_all_jobs, get_job_result, send_to_fifo, start_controller_service, stop_controller_service
@@ -109,7 +109,10 @@ class ControllerHandler(http.server.BaseHTTPRequestHandler):
         return True
 
     def _check_auth(self, path: str) -> bool:
-        """토큰 인증을 검증한다. 면제 경로는 건너뛴다."""
+        """토큰 인증을 검증한다. AUTH_REQUIRED=false면 항상 통과."""
+        if not AUTH_REQUIRED:
+            return True
+
         # 정적 파일 및 면제 경로
         if path in AUTH_EXEMPT_PATHS:
             return True

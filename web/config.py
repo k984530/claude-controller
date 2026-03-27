@@ -47,9 +47,12 @@ ALLOWED_ORIGINS: list[str] = [
 # 허용된 Host 헤더 (DNS Rebinding 방지)
 ALLOWED_HOSTS = {"localhost", "127.0.0.1", "[::1]"}
 
-# 인증 면제 경로 (토큰 없이 접근 가능)
-# - 정적 파일 (프론트엔드 로컬 서빙 시 필요)
-# - /api/auth/verify (토큰 검증 엔드포인트 자체)
+# 토큰 인증 필수 여부
+# false: CORS + Host 검증만으로 보안 (기본값, 자동 연결에 적합)
+# true: 모든 API 요청에 Authorization: Bearer <token> 필수
+AUTH_REQUIRED = os.environ.get("AUTH_REQUIRED", "false").lower() == "true"
+
+# 인증 면제 경로 (AUTH_REQUIRED=true일 때만 적용)
 AUTH_EXEMPT_PREFIXES = ("/static/", "/uploads/", "/api/auth/")
 AUTH_EXEMPT_PATHS = {"/", "/index.html", "/styles.css", "/app.js"}
 
