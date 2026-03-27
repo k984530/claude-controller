@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# start-gui → start (하위 호환 래퍼)
+# 웹 GUI는 TUI로 교체됨
+exec "$(dirname "$0")/start" "$@"

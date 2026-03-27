@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# ============================================================
+# claude-sh — Claude Shell Controller 진입점
+#
+# 사용법:
+#   claude-sh                     인터랙티브 쉘 모드
+#   claude-sh "프롬프트"          단일 명령 실행
+#   claude-sh "프롬프트" &        백그라운드 실행
+#   echo "프롬프트" | claude-sh   파이프라인 입력
+# ============================================================
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+exec bash "${SCRIPT_DIR}/claude-shell.sh" "$@"

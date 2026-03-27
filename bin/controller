@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Controller service entry point
+# Usage:
+#   controller start    — 서비스 시작
+#   controller stop     — 서비스 중지
+#   controller restart  — 재시작
+#   controller status   — 상태 확인
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "${SCRIPT_DIR}/config.sh"
+
+case "${1:-start}" in
+  start)
+    exec bash "${SCRIPT_DIR}/service/controller.sh" start
+    ;;
+  stop)
+    exec bash "${SCRIPT_DIR}/service/controller.sh" stop
+    ;;
+  restart)
+    bash "${SCRIPT_DIR}/service/controller.sh" stop
+    sleep 1
+    exec bash "${SCRIPT_DIR}/service/controller.sh" start
+    ;;
+  status)
+    exec bash "${SCRIPT_DIR}/service/controller.sh" status
+    ;;
+  *)
+    echo "사용법: controller {start|stop|restart|status}"
+    exit 1
+    ;;
+esac

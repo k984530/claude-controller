@@ -1,0 +1,2584 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Controller Service</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --surface-hover: #222531;
+  --surface-active: #2a2d3a;
+  --border: #2e3140;
+  --border-light: #3a3d4a;
+  --text: #e4e6ed;
+  --text-secondary: #8b8fa3;
+  --text-muted: #5c5f73;
+  --accent: #6c8cff;
+  --accent-hover: #8aa4ff;
+  --accent-glow: rgba(108, 140, 255, 0.15);
+  --green: #34d399;
+  --green-dim: rgba(52, 211, 153, 0.15);
+  --red: #f87171;
+  --red-dim: rgba(248, 113, 113, 0.15);
+  --yellow: #fbbf24;
+  --yellow-dim: rgba(251, 191, 36, 0.15);
+  --blue: #60a5fa;
+  --blue-dim: rgba(96, 165, 250, 0.15);
+  --radius: 8px;
+  --radius-lg: 12px;
+  --font: 'Noto Sans KR', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
+  --transition: 0.2s ease;
+  --shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+html { font-size: 14px; }
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
+
+/* ── Header ── */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  height: 56px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(12px);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.logo span { color: var(--accent); }
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  background: var(--green-dim);
+  color: var(--green);
+  transition: all var(--transition);
+}
+
+.status-badge.stopped {
+  background: var(--red-dim);
+  color: var(--red);
+}
+
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.status-badge.stopped .status-dot { animation: none; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Buttons ── */
+button {
+  font-family: var(--font);
+  cursor: pointer;
+  border: none;
+  outline: none;
+  transition: all var(--transition);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: var(--radius);
+  font-size: 0.82rem;
+  font-weight: 500;
+  background: var(--surface-hover);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.btn:hover {
+  background: var(--surface-active);
+  color: var(--text);
+  border-color: var(--border-light);
+}
+
+.btn:active { transform: scale(0.97); }
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.btn-primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  box-shadow: 0 0 20px var(--accent-glow);
+}
+
+.btn-danger {
+  color: var(--red);
+}
+
+.btn-danger:hover {
+  background: var(--red-dim);
+  border-color: var(--red);
+}
+
+.btn-success {
+  color: var(--green);
+}
+
+.btn-success:hover {
+  background: var(--green-dim);
+  border-color: var(--green);
+}
+
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 0.75rem;
+}
+
+.btn-icon {
+  padding: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Layout ── */
+.layout {
+  min-height: calc(100vh - 56px);
+}
+
+.main {
+  flex: 1;
+  padding: 24px;
+  overflow-x: hidden;
+  width: 100%;
+}
+
+/* ── CWD badge ── */
+.cwd-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  background: var(--accent-glow);
+  color: var(--accent);
+  margin-left: 8px;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.cwd-badge:empty { display: none; }
+
+/* ── Directory Picker ── */
+.dir-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dir-picker-display {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-family: var(--font-mono);
+  min-height: 38px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.dir-picker-display:hover {
+  border-color: var(--border-light);
+  background: var(--surface);
+}
+
+.dir-picker-display.has-value {
+  color: var(--text);
+}
+
+.dir-picker-display .dir-icon {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.dir-picker-clear {
+  flex-shrink: 0;
+  padding: 4px;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  cursor: pointer;
+  display: none;
+}
+
+.dir-picker-clear:hover {
+  background: var(--red-dim);
+  color: var(--red);
+}
+
+.dir-picker-clear.visible { display: inline-flex; }
+
+/* ── Recent Directory Chips ── */
+.recent-dirs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.recent-dirs:empty { display: none; }
+
+.recent-dirs-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 500;
+  flex-shrink: 0;
+  margin-right: 2px;
+}
+
+.recent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  transition: all var(--transition);
+  max-width: 200px;
+}
+
+.recent-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-glow);
+}
+
+.recent-chip.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-glow);
+  font-weight: 500;
+}
+
+.recent-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-chip-remove {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  margin-left: 2px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition);
+}
+
+.recent-chip-remove:hover {
+  background: var(--red-dim);
+  color: var(--red);
+}
+
+/* ── Inline Directory Browser Panel ── */
+.dir-browser-panel {
+  display: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  margin-top: 8px;
+  overflow: hidden;
+  animation: panel-slide 0.15s ease-out;
+}
+
+.dir-browser-panel.open { display: block; }
+
+@keyframes panel-slide {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.dir-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dir-modal-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.dir-modal-close {
+  padding: 4px;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  cursor: pointer;
+}
+
+.dir-modal-close:hover { background: var(--surface-active); color: var(--text); }
+
+.dir-modal-path {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.dir-modal-path .breadcrumb-seg {
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--accent);
+  transition: background var(--transition);
+}
+
+.dir-modal-path .breadcrumb-seg:hover {
+  background: var(--accent-glow);
+}
+
+.dir-modal-path .breadcrumb-sep {
+  color: var(--text-muted);
+}
+
+.dir-modal-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+  max-height: 240px;
+}
+
+.dir-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--text);
+  transition: background var(--transition);
+}
+
+.dir-item:hover { background: var(--surface-hover); }
+
+.dir-item-icon {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  color: var(--text-muted);
+}
+
+.dir-item-icon.is-dir { color: var(--yellow); }
+.dir-item-icon.is-parent { color: var(--accent); }
+
+.dir-item-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dir-item-name.is-dir { font-weight: 500; }
+
+.dir-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  gap: 8px;
+}
+
+.dir-modal-current {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dir-modal-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  gap: 8px;
+}
+
+/* ── Cards / Sections ── */
+.section {
+  margin-bottom: 24px;
+  animation: fadeIn 0.3s ease forwards;
+  animation-iteration-count: 1;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.card-title {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-title svg { width: 16px; height: 16px; color: var(--accent); }
+
+.card-body { padding: 18px; }
+
+/* ── Send Task Form ── */
+.form-group { margin-bottom: 14px; }
+
+.form-label {
+  display: flex;
+  align-items: center;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+textarea, input[type="text"] {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 0.85rem;
+  line-height: 1.6;
+  resize: vertical;
+  transition: border-color var(--transition);
+}
+
+textarea:focus, input[type="text"]:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+textarea { min-height: 100px; position: relative; }
+
+/* ── Image Attachments ── */
+.prompt-wrapper {
+  position: relative;
+}
+
+.prompt-wrapper.drag-over textarea {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.drop-overlay {
+  display: none;
+  position: absolute;
+  inset: 0;
+  background: rgba(108, 140, 255, 0.08);
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius);
+  z-index: 10;
+  pointer-events: none;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent);
+  gap: 8px;
+}
+
+.prompt-wrapper.drag-over .drop-overlay {
+  display: flex;
+}
+
+.image-previews {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.image-previews:empty { display: none; }
+
+.img-thumb {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  background: var(--bg);
+  flex-shrink: 0;
+  animation: fadeIn 0.2s ease;
+}
+
+.img-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  cursor: pointer;
+}
+
+.img-thumb .img-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.7);
+  color: #fff;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+  border: none;
+  padding: 0;
+  line-height: 1;
+}
+
+.img-thumb:hover .img-remove {
+  opacity: 1;
+}
+
+.img-thumb.uploading {
+  opacity: 0.5;
+}
+
+.img-thumb.uploading::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.3);
+}
+
+.img-count-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  background: var(--accent-glow);
+  color: var(--accent);
+  margin-left: 8px;
+}
+
+.img-count-badge:empty { display: none; }
+
+/* ── File Attachments (non-image) ── */
+.file-thumb {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  max-width: 200px;
+  animation: fadeIn 0.2s ease;
+  flex-shrink: 0;
+}
+.file-thumb .file-icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: var(--surface-active);
+  color: var(--text-muted);
+  flex-shrink: 0;
+  font-size: 0.6rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+}
+.file-thumb .file-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
+  min-width: 0;
+}
+.file-thumb .file-name {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.file-thumb .file-size {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+.file-thumb .file-remove {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.7);
+  color: #fff;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+  border: none;
+  padding: 0;
+  line-height: 1;
+}
+.file-thumb:hover .file-remove { opacity: 1; }
+.file-thumb.uploading { opacity: 0.5; }
+
+/* ── Attach Button (inside prompt-wrapper) ── */
+.attach-float-btn {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition);
+  z-index: 5;
+}
+.attach-float-btn:hover {
+  background: var(--surface-active);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+textarea::placeholder, input::placeholder {
+  color: var(--text-muted);
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ── Job Table ── */
+.table-wrap { overflow-x: auto; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+th {
+  text-align: left;
+  padding: 10px 14px;
+  font-weight: 600;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  vertical-align: top;
+}
+
+tr:hover td { background: var(--surface-hover); }
+tr { cursor: pointer; transition: background var(--transition); }
+thead tr { cursor: default; }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge-running {
+  background: var(--blue-dim);
+  color: var(--blue);
+}
+
+.badge-running::before {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--blue);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.badge-done {
+  background: var(--green-dim);
+  color: var(--green);
+}
+
+.badge-failed {
+  background: var(--red-dim);
+  color: var(--red);
+}
+
+.badge-pending {
+  background: var(--yellow-dim);
+  color: var(--yellow);
+}
+
+.prompt-cell {
+  max-width: 600px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.job-id {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--accent);
+}
+
+.job-cwd {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.job-pid {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+
+.job-time {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.expand-row td {
+  padding: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.expand-content {
+  padding: 14px 18px;
+  background: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 300px;
+  overflow-y: auto;
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; max-height: 0; }
+  to { opacity: 1; max-height: 300px; }
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.empty-state svg {
+  width: 40px;
+  height: 40px;
+  margin-bottom: 12px;
+  opacity: 0.3;
+}
+
+/* ── Stream Panel ── */
+.stream-panel {
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  animation: streamSlideDown 0.25s ease;
+}
+
+@keyframes streamSlideDown {
+  from { opacity: 0; max-height: 0; }
+  to { opacity: 1; max-height: 600px; }
+}
+
+
+.stream-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--border-light);
+  border-top-color: var(--blue);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.stream-pulse {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  color: var(--blue);
+  font-weight: 500;
+}
+
+.stream-pulse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--blue);
+  animation: streamPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes streamPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.3; transform: scale(0.7); }
+}
+
+.stream-content {
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 14px 18px;
+  background: #080a0e;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.7;
+  scroll-behavior: smooth;
+}
+
+.stream-content::-webkit-scrollbar-thumb { background: var(--border-light); }
+
+.stream-event {
+  padding: 3px 0;
+  word-break: break-word;
+}
+
+.stream-event + .stream-event {
+  margin-top: 2px;
+}
+
+.stream-event-text {
+  color: #e4e6ed;
+  white-space: pre-wrap;
+}
+
+.stream-event-tool {
+  color: var(--yellow);
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.stream-tool-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--yellow-dim);
+  color: var(--yellow);
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.stream-tool-badge::before {
+  content: '>';
+  opacity: 0.5;
+}
+
+.stream-tool-input {
+  color: #d4d4d4;
+  white-space: pre-wrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.stream-event-result {
+  color: var(--green);
+  padding: 6px 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.stream-result-icon {
+  color: var(--green);
+  flex-shrink: 0;
+  font-weight: 700;
+}
+
+.stream-result-text {
+  white-space: pre-wrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.stream-event-error {
+  color: var(--red);
+  padding: 4px 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.stream-error-icon {
+  color: var(--red);
+  flex-shrink: 0;
+  font-weight: 700;
+}
+
+.stream-error-text {
+  white-space: pre-wrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.stream-empty {
+  color: var(--text-muted);
+  text-align: center;
+  padding: 24px;
+  font-size: 0.8rem;
+}
+
+.stream-done-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 18px;
+  background: var(--green-dim);
+  color: var(--green);
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-top: 1px solid rgba(52, 211, 153, 0.2);
+}
+
+.stream-done-banner.failed {
+  background: var(--red-dim);
+  color: var(--red);
+  border-top-color: rgba(248, 113, 113, 0.2);
+}
+
+/* ── Stream Action Buttons ── */
+.stream-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.stream-actions .btn svg { flex-shrink: 0; }
+
+/* ── Delete Button in Job Row ── */
+.btn-delete-job {
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  font-size: 0.72rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all var(--transition);
+}
+
+.btn-delete-job:hover {
+  background: var(--red-dim);
+  color: var(--red);
+  border-color: var(--red);
+}
+
+/* ── Retry Job Button in Job Row ── */
+.btn-retry-job {
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  font-size: 0.72rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all var(--transition);
+}
+
+.btn-retry-job:hover {
+  background: var(--yellow-dim);
+  color: var(--yellow);
+  border-color: var(--yellow);
+}
+
+/* ── Continue Session Button in Job Row ── */
+.btn-continue-job {
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  font-size: 0.72rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all var(--transition);
+}
+
+.btn-continue-job:hover {
+  background: var(--accent-glow);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* ── Follow-up Input in Stream Panel ── */
+.stream-followup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.stream-followup-label {
+  font-size: 0.7rem;
+  color: var(--accent);
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.followup-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+
+.followup-input {
+  flex: 1;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.78rem;
+  font-family: var(--font-mono);
+  outline: none;
+  transition: border-color var(--transition);
+}
+
+.followup-input:focus {
+  border-color: var(--accent);
+}
+
+.followup-input::placeholder {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+/* ── Copy Success Animation ── */
+.btn-copied {
+  color: var(--green) !important;
+  border-color: var(--green) !important;
+  background: var(--green-dim) !important;
+}
+
+/* ── Toast ── */
+.toast-container {
+  position: fixed;
+  top: 70px;
+  right: 24px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toast {
+  padding: 10px 16px;
+  border-radius: var(--radius);
+  font-size: 0.82rem;
+  font-weight: 500;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  animation: toastIn 0.3s ease, toastOut 0.3s ease 2.7s forwards;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toast.success { border-color: var(--green); color: var(--green); }
+.toast.error { border-color: var(--red); color: var(--red); }
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes toastOut {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(20px); }
+}
+
+/* ── Spinner ── */
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .main { padding: 16px; }
+}
+
+@media (max-width: 600px) {
+  .header { padding: 0 14px; }
+  .header-actions .btn span { display: none; }
+  .main { padding: 12px; }
+  .card-body { padding: 14px; }
+  th, td { padding: 8px 10px; }
+  .prompt-cell { max-width: 140px; }
+  .job-cwd { max-width: 120px; }
+  .stream-content { max-height: 300px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header class="header">
+  <div class="header-left">
+    <div class="logo"><span>&gt;_</span> Controller Service</div>
+    <div class="status-badge" id="statusBadge">
+      <div class="status-dot"></div>
+      <span id="statusText">확인 중...</span>
+    </div>
+  </div>
+  <div class="header-actions">
+  </div>
+</header>
+
+<!-- ── Layout ── -->
+<div class="layout">
+
+  <!-- Main Content -->
+  <main class="main">
+
+    <!-- Section 1: Send Task -->
+    <div class="section" id="sendTask">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            새 작업 전송
+          </div>
+        </div>
+        <div class="card-body">
+          <form id="sendForm" onsubmit="return sendTask(event)">
+            <!-- Recent directory chips -->
+            <div class="recent-dirs" id="recentDirs"></div>
+
+            <div class="form-group">
+              <label class="form-label">프롬프트 <span class="img-count-badge" id="imgCountBadge"></span></label>
+              <div class="prompt-wrapper" id="promptWrapper">
+                <textarea id="promptInput" placeholder="Claude에게 전달할 명령을 입력하세요... (파일/이미지 드래그 또는 붙여넣기 가능)" rows="4"></textarea>
+                <div class="drop-overlay" id="dropOverlay">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+                  파일을 여기에 놓으세요
+                </div>
+                <button type="button" class="attach-float-btn" onclick="openFilePicker()" title="파일 첨부 (드래그&드롭도 가능)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                </button>
+              </div>
+              <input type="file" id="filePickerInput" multiple hidden>
+              <div class="image-previews" id="attachmentPreviews"></div>
+            </div>
+
+            <!-- Inline directory picker + browser -->
+            <input type="hidden" id="cwdInput">
+            <div class="form-group" style="margin-top: 4px;">
+              <div class="dir-picker">
+                <div class="dir-picker-display" id="dirPickerDisplay" onclick="toggleDirBrowser()" title="클릭하여 디렉토리 선택">
+                  <svg class="dir-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                  <span id="dirPickerText">디렉토리를 선택하세요...</span>
+                  <svg id="dirPickerChevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left:auto; flex-shrink:0; transition:transform 0.2s;"><polyline points="6 9 12 15 18 9"/></svg>
+                </div>
+                <button type="button" class="dir-picker-clear" id="dirPickerClear" onclick="clearDirSelection()" title="선택 해제">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </div>
+              <!-- Inline directory browser (replaces modal) -->
+              <div class="dir-browser-panel" id="dirBrowserPanel">
+                <div class="dir-modal-header">
+                  <span class="dir-modal-title">디렉토리 탐색</span>
+                  <button type="button" class="dir-modal-close" onclick="closeDirBrowser()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  </button>
+                </div>
+                <div class="dir-modal-path" id="dirBreadcrumb"></div>
+                <div class="dir-modal-list" id="dirList"></div>
+                <div class="dir-modal-footer">
+                  <div class="dir-modal-current" id="dirCurrentPath"></div>
+                  <button type="button" class="btn btn-sm" onclick="closeDirBrowser()">닫기</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button type="button" class="btn" onclick="clearPromptForm();">초기화</button>
+              <button type="submit" class="btn btn-primary" id="btnSend">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                전송
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 2: Job List -->
+    <div class="section" id="jobList">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+            작업 목록
+            <span id="jobCount" style="font-size:0.72rem; color:var(--text-muted); font-weight:400;"></span>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button class="btn btn-sm btn-danger" id="btnDeleteCompleted" onclick="deleteCompletedJobs()" title="완료된 작업 모두 제거" style="display:none;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              <span>완료 삭제</span>
+            </button>
+            <div id="jobRefreshIndicator" class="spinner" style="display:none;"></div>
+            <button class="btn btn-sm btn-icon" onclick="fetchJobs()" title="새로고침">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>상태</th>
+                <th>프롬프트</th>
+                <th>폴더</th>
+                <th>PID</th>
+                <th>생성 시간</th>
+                <th style="width:80px;"></th>
+              </tr>
+            </thead>
+            <tbody id="jobTableBody">
+              <tr data-job-id="__loading__"><td colspan="7" class="empty-state">
+                <div class="spinner" style="margin: 0 auto 12px;"></div>
+                <div>작업 목록을 불러오는 중...</div>
+              </td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+/* ═══════════════════════════════════════════════
+   Controller Service Dashboard — Vanilla JS
+   ═══════════════════════════════════════════════ */
+
+const API = '';  // same origin
+let expandedJobId = null;
+let jobPollTimer = null;
+let serviceRunning = null;
+
+// ── Stream State ──
+// Per-job stream state: { offset, timer, done, jobData }
+const streamState = {};
+
+// ── Toast Notifications ──
+function showToast(message, type = 'success') {
+  const container = document.getElementById('toastContainer');
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  const icon = type === 'success'
+    ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>'
+    : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
+  toast.innerHTML = `${icon} ${escapeHtml(message)}`;
+  container.appendChild(toast);
+  setTimeout(() => { if (toast.parentNode) toast.remove(); }, 3000);
+}
+
+// ── Utility ──
+function escapeHtml(str) {
+  if (!str) return '';
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function truncate(str, len = 60) {
+  if (!str) return '-';
+  return str.length > len ? str.slice(0, len) + '...' : str;
+}
+
+function formatTime(ts) {
+  if (!ts) return '-';
+  try {
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return ts;
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  } catch { return ts; }
+}
+
+function formatCwd(cwd) {
+  if (!cwd) return '-';
+  // 경로의 마지막 폴더명만 표시 (예: /Users/me/Desktop/project → project)
+  const parts = cwd.replace(/\/$/, '').split('/');
+  return parts[parts.length - 1] || cwd;
+}
+
+function formatElapsed(startTs) {
+  if (!startTs) return '--:--';
+  const start = new Date(startTs).getTime();
+  if (isNaN(start)) return '--:--';
+  const elapsed = Math.max(0, Math.floor((Date.now() - start) / 1000));
+  const h = Math.floor(elapsed / 3600);
+  const m = Math.floor((elapsed % 3600) / 60);
+  const s = elapsed % 60;
+  const pad = n => String(n).padStart(2, '0');
+  if (h > 0) return `${h}:${pad(m)}:${pad(s)}`;
+  return `${pad(m)}:${pad(s)}`;
+}
+
+// ── API Helpers ──
+async function apiFetch(path, options = {}) {
+  try {
+    const resp = await fetch(`${API}${path}`, {
+      headers: { 'Content-Type': 'application/json' },
+      ...options,
+    });
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => '');
+      throw new Error(text || `HTTP ${resp.status}`);
+    }
+    const ct = resp.headers.get('content-type') || '';
+    if (ct.includes('application/json')) return resp.json();
+    return resp.text();
+  } catch (err) {
+    throw err;
+  }
+}
+
+// ── Service Status ──
+async function checkStatus() {
+  const badge = document.getElementById('statusBadge');
+  const text = document.getElementById('statusText');
+  try {
+    const data = await apiFetch('/api/status');
+    const running = data.running !== undefined ? data.running : (data.status === 'running');
+    serviceRunning = running;
+    badge.className = `status-badge ${running ? '' : 'stopped'}`;
+    text.textContent = running ? '실행 중' : '중지됨';
+  } catch {
+    serviceRunning = null;
+    badge.className = 'status-badge stopped';
+    text.textContent = '연결 실패';
+  }
+}
+
+// ── Service Actions ──
+async function serviceAction(action) {
+  const btn = document.getElementById(`btn${action.charAt(0).toUpperCase() + action.slice(1)}`);
+  if (btn) btn.disabled = true;
+  try {
+    if (action === 'restart') {
+      await apiFetch('/api/service/stop', { method: 'POST' });
+      await new Promise(r => setTimeout(r, 500));
+      await apiFetch('/api/service/start', { method: 'POST' });
+    } else {
+      await apiFetch(`/api/service/${action}`, { method: 'POST' });
+    }
+    showToast(`서비스 ${action === 'start' ? '시작' : action === 'stop' ? '중지' : '재시작'} 요청 완료`);
+    setTimeout(checkStatus, 1000);
+  } catch (err) {
+    showToast(`서비스 ${action} 실패: ${err.message}`, 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+// ── Attachments State (이미지 + 파일 통합) ──
+const attachments = []; // { localUrl, serverPath, filename, isImage, size }
+
+function updateAttachBadge() {
+  const badge = document.getElementById('imgCountBadge');
+  const count = attachments.filter(a => a).length;
+  badge.textContent = count > 0 ? `${count}개 첨부` : '';
+}
+
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function getFileExt(filename) {
+  const dot = filename.lastIndexOf('.');
+  return dot >= 0 ? filename.slice(dot + 1).toUpperCase() : '?';
+}
+
+async function uploadFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const data = await apiFetch('/api/upload', {
+          method: 'POST',
+          body: JSON.stringify({ filename: file.name, data: reader.result }),
+        });
+        resolve(data);
+      } catch (err) {
+        reject(err);
+      }
+    };
+    reader.onerror = () => reject(new Error('파일 읽기 실패'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function removeAttachment(idx) {
+  attachments[idx] = null;
+  const container = document.getElementById('attachmentPreviews');
+  const thumb = container.querySelector(`[data-idx="${idx}"]`);
+  if (thumb) thumb.remove();
+  updateAttachBadge();
+}
+
+function clearAttachments() {
+  attachments.length = 0;
+  document.getElementById('attachmentPreviews').innerHTML = '';
+  updateAttachBadge();
+}
+
+function clearPromptForm() {
+  document.getElementById('promptInput').value = '';
+  clearAttachments();
+  if (typeof clearDirSelection === 'function') clearDirSelection();
+}
+
+function openFilePicker() {
+  document.getElementById('filePickerInput').click();
+}
+
+async function handleFiles(files) {
+  const container = document.getElementById('attachmentPreviews');
+  for (const file of files) {
+    const isImage = file.type.startsWith('image/');
+    const localUrl = isImage ? URL.createObjectURL(file) : null;
+
+    // 즉시 미리보기 추가 (uploading 상태)
+    const tempIdx = attachments.length;
+    attachments.push({ localUrl, serverPath: null, filename: file.name, isImage, size: file.size });
+
+    const thumb = document.createElement('div');
+    thumb.dataset.idx = tempIdx;
+
+    if (isImage) {
+      thumb.className = 'img-thumb uploading';
+      thumb.innerHTML = `<img src="${localUrl}" alt="${escapeHtml(file.name)}">
+        <button class="img-remove" onclick="removeAttachment(${tempIdx})" title="제거">&times;</button>`;
+    } else {
+      thumb.className = 'file-thumb uploading';
+      thumb.innerHTML = `
+        <div class="file-icon">${escapeHtml(getFileExt(file.name))}</div>
+        <div class="file-info">
+          <div class="file-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</div>
+          <div class="file-size">${formatFileSize(file.size)}</div>
+        </div>
+        <button class="file-remove" onclick="removeAttachment(${tempIdx})" title="제거">&times;</button>`;
+    }
+    container.appendChild(thumb);
+    updateAttachBadge();
+
+    try {
+      const data = await uploadFile(file);
+      attachments[tempIdx].serverPath = data.path;
+      attachments[tempIdx].filename = data.filename || file.name;
+      thumb.classList.remove('uploading');
+    } catch (err) {
+      showToast(`업로드 실패: ${escapeHtml(file.name)} — ${err.message}`, 'error');
+      attachments[tempIdx] = null;
+      thumb.remove();
+      updateAttachBadge();
+    }
+  }
+}
+
+// ── Send Task ──
+async function sendTask(e) {
+  e.preventDefault();
+  const prompt = document.getElementById('promptInput').value.trim();
+  if (!prompt) {
+    showToast('프롬프트를 입력해주세요.', 'error');
+    return false;
+  }
+  const cwd = document.getElementById('cwdInput').value.trim();
+  const btn = document.getElementById('btnSend');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> 전송 중...';
+
+  try {
+    const body = { prompt };
+    if (cwd) body.cwd = cwd;
+
+    // 첨부 파일 경로 수집 (이미지 + 파일 통합)
+    const filePaths = attachments.filter(a => a && a.serverPath).map(a => a.serverPath);
+    if (filePaths.length > 0) body.images = filePaths;
+
+    await apiFetch('/api/send', { method: 'POST', body: JSON.stringify(body) });
+    showToast('작업이 전송되었습니다.');
+    if (cwd) addRecentDir(cwd);
+    document.getElementById('promptInput').value = '';
+    clearAttachments();
+    fetchJobs();
+  } catch (err) {
+    showToast(`전송 실패: ${err.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> 전송';
+  }
+  return false;
+}
+
+// ── Job List ──
+function statusBadgeHtml(status) {
+  const s = (status || 'unknown').toLowerCase();
+  const labels = { running: '실행 중', done: '완료', failed: '실패', pending: '대기 중' };
+  const cls = { running: 'badge-running', done: 'badge-done', failed: 'badge-failed', pending: 'badge-pending' };
+  return `<span class="badge ${cls[s] || 'badge-pending'}">${labels[s] || s}</span>`;
+}
+
+function jobActionsHtml(id, status, sessionId) {
+  if (status === 'running') return '';
+  let btns = '';
+  btns += `<button class="btn-retry-job" onclick="event.stopPropagation(); retryJob('${escapeHtml(id)}')" title="같은 프롬프트로 다시 실행"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>`;
+  if (sessionId) {
+    btns += `<button class="btn-continue-job" onclick="event.stopPropagation(); openFollowUp('${escapeHtml(id)}')" title="세션 이어서 명령"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg></button>`;
+  }
+  btns += `<button class="btn-delete-job" onclick="event.stopPropagation(); deleteJob('${escapeHtml(id)}')" title="작업 제거"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>`;
+  return `<div style="display:flex; align-items:center; gap:4px;">${btns}</div>`;
+}
+
+function openFollowUp(jobId) {
+  // 스트림 패널이 열려있지 않으면 먼저 확장
+  if (expandedJobId !== jobId) {
+    toggleJobExpand(jobId);
+    // DOM 업데이트 후 포커스를 위해 짧은 딜레이
+    setTimeout(() => focusFollowUpInput(jobId), 200);
+  } else {
+    focusFollowUpInput(jobId);
+  }
+}
+
+function focusFollowUpInput(jobId) {
+  const input = document.getElementById(`followupInput-${jobId}`);
+  if (input) {
+    input.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    input.focus();
+  }
+}
+
+async function sendFollowUp(jobId) {
+  const input = document.getElementById(`followupInput-${jobId}`);
+  if (!input) return;
+  const prompt = input.value.trim();
+  if (!prompt) {
+    showToast('이어서 실행할 명령을 입력해주세요.', 'error');
+    return;
+  }
+
+  const panel = document.getElementById(`streamPanel-${jobId}`);
+  const sessionId = panel ? panel.dataset.sessionId : '';
+  const cwd = panel ? panel.dataset.cwd : '';
+
+  if (!sessionId) {
+    showToast('세션 ID가 없어서 이어서 실행할 수 없습니다.', 'error');
+    return;
+  }
+
+  const btn = input.nextElementSibling;
+  const origHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner" style="width:12px;height:12px;"></span>';
+
+  try {
+    const body = { prompt, session: `resume:${sessionId}` };
+    if (cwd) body.cwd = cwd;
+
+    await apiFetch('/api/send', { method: 'POST', body: JSON.stringify(body) });
+    showToast('세션 이어서 명령이 전송되었습니다.');
+    input.value = '';
+    fetchJobs();
+  } catch (err) {
+    showToast(`전송 실패: ${err.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = origHtml;
+  }
+}
+
+async function retryJob(jobId) {
+  // 작업 목록에서 해당 job의 prompt와 cwd를 가져옴
+  try {
+    const data = await apiFetch('/api/jobs');
+    const jobs = Array.isArray(data) ? data : (data.jobs || []);
+    const job = jobs.find(j => String(j.id || j.job_id) === String(jobId));
+    if (!job || !job.prompt) {
+      showToast('원본 프롬프트를 찾을 수 없습니다.', 'error');
+      return;
+    }
+
+    const body = { prompt: job.prompt };
+    if (job.cwd) body.cwd = job.cwd;
+
+    await apiFetch('/api/send', { method: 'POST', body: JSON.stringify(body) });
+    showToast('같은 프롬프트로 다시 실행되었습니다.');
+    fetchJobs();
+  } catch (err) {
+    showToast(`재실행 실패: ${err.message}`, 'error');
+  }
+}
+
+async function fetchJobs() {
+  const indicator = document.getElementById('jobRefreshIndicator');
+  indicator.style.display = 'inline-block';
+  try {
+    const data = await apiFetch('/api/jobs');
+    const jobs = Array.isArray(data) ? data : (data.jobs || []);
+    renderJobs(jobs);
+  } catch {
+    // silent fail for polling
+  } finally {
+    indicator.style.display = 'none';
+  }
+}
+
+
+function renderJobs(jobs) {
+  const tbody = document.getElementById('jobTableBody');
+  const countEl = document.getElementById('jobCount');
+  countEl.textContent = jobs.length > 0 ? `(${jobs.length}건)` : '';
+
+  if (jobs.length === 0) {
+    tbody.innerHTML = `<tr data-job-id="__empty__"><td colspan="7" class="empty-state">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:40px;height:40px;margin-bottom:12px;opacity:0.3;"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+      <div>작업이 없습니다</div>
+    </td></tr>`;
+    return;
+  }
+
+  // Sort: running first, then by job ID desc (최근 작업이 위로)
+  jobs.sort((a, b) => {
+    const aRunning = a.status === 'running' ? 0 : 1;
+    const bRunning = b.status === 'running' ? 0 : 1;
+    if (aRunning !== bRunning) return aRunning - bRunning;
+    return (parseInt(b.id || b.job_id || 0)) - (parseInt(a.id || a.job_id || 0));
+  });
+
+  // Store job data for stream panels
+  for (const job of jobs) {
+    const id = job.id || job.job_id || '-';
+    if (streamState[id]) {
+      streamState[id].jobData = job;
+    }
+  }
+
+  // ── Diff-based DOM update: 기존 행과 비교하여 변경된 부분만 업데이트 ──
+  const existingRows = {};
+  for (const row of tbody.querySelectorAll('tr[data-job-id]')) {
+    existingRows[row.dataset.jobId] = row;
+  }
+
+  // 새 작업 ID 순서 배열 (expand row 포함)
+  const newIds = [];
+  for (const job of jobs) {
+    const id = job.id || job.job_id || '-';
+    newIds.push(id);
+    if (expandedJobId === id) newIds.push(id + '__expand');
+  }
+
+  // 기존에 없는 빈 상태 행 제거
+  const emptyRow = tbody.querySelector('tr[data-job-id="__empty__"]');
+  if (emptyRow) emptyRow.remove();
+
+  for (const job of jobs) {
+    const id = job.id || job.job_id || '-';
+    const isExpanded = expandedJobId === id;
+    const existing = existingRows[id];
+
+    if (existing && !existing.classList.contains('expand-row')) {
+      // ── 기존 행 업데이트: 변경된 셀만 수정 ──
+      const cells = existing.querySelectorAll('td');
+      if (cells.length >= 7) {
+        const newStatus = statusBadgeHtml(job.status);
+        if (cells[1].innerHTML !== newStatus) cells[1].innerHTML = newStatus;
+        // 폴더 업데이트
+        const newCwd = escapeHtml(formatCwd(job.cwd));
+        if (cells[3].innerHTML !== newCwd) {
+          cells[3].innerHTML = newCwd;
+          cells[3].title = job.cwd || '';
+        }
+        const newPid = job.pid || '-';
+        if (cells[4].textContent !== String(newPid)) cells[4].textContent = newPid;
+        // 액션 버튼 업데이트 (running→done 전환 시)
+        const newActions = jobActionsHtml(id, job.status, job.session_id);
+        if (cells[6].innerHTML !== newActions) {
+          cells[6].innerHTML = newActions;
+        }
+      }
+      existing.className = isExpanded ? 'expanded' : '';
+      delete existingRows[id];
+    } else if (!existing) {
+      // ── 새 행 생성 ──
+      const tr = document.createElement('tr');
+      tr.dataset.jobId = id;
+      tr.className = isExpanded ? 'expanded' : '';
+      tr.setAttribute('onclick', `toggleJobExpand('${escapeHtml(id)}')`);
+      tr.innerHTML = `
+        <td class="job-id">${escapeHtml(String(id).slice(0, 8))}</td>
+        <td>${statusBadgeHtml(job.status)}</td>
+        <td class="prompt-cell" title="${escapeHtml(job.prompt)}">${escapeHtml(truncate(job.prompt))}</td>
+        <td class="job-cwd" title="${escapeHtml(job.cwd || '')}">${escapeHtml(formatCwd(job.cwd))}</td>
+        <td class="job-pid">${job.pid || '-'}</td>
+        <td class="job-time">${formatTime(job.created || job.created_at)}</td>
+        <td>${jobActionsHtml(id, job.status, job.session_id)}</td>`;
+      tbody.appendChild(tr);
+    } else {
+      delete existingRows[id];
+    }
+
+    // ── Expand row 처리 ──
+    const expandKey = id + '__expand';
+    const existingExpand = existingRows[expandKey] || tbody.querySelector(`tr[data-job-id="${CSS.escape(expandKey)}"]`);
+
+    if (isExpanded) {
+      if (!existingExpand) {
+        // 스트림 패널 행 새로 생성
+        const expandTr = document.createElement('tr');
+        expandTr.className = 'expand-row';
+        expandTr.dataset.jobId = expandKey;
+        const sessionId = job.session_id || '';
+        const jobCwd = job.cwd || '';
+        expandTr.innerHTML = `<td colspan="7">
+          <div class="stream-panel" id="streamPanel-${escapeHtml(id)}" data-session-id="${escapeHtml(sessionId)}" data-cwd="${escapeHtml(jobCwd)}">
+            <div class="stream-content" id="streamContent-${escapeHtml(id)}">
+              <div class="stream-empty">
+                ${job.status === 'running' ? '<div class="stream-spinner" style="margin:0 auto 8px;"></div>' : ''}
+                스트림 데이터를 불러오는 중...
+              </div>
+            </div>
+            ${job.status === 'done' ? '<div class="stream-done-banner">✓ 작업 완료</div>' : ''}
+            ${job.status === 'failed' ? '<div class="stream-done-banner failed">✗ 작업 실패</div>' : ''}
+            ${job.status !== 'running' ? `<div class="stream-actions"><button class="btn btn-sm" onclick="event.stopPropagation(); retryJob('${escapeHtml(id)}')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg> 다시 실행</button><button class="btn btn-sm" onclick="event.stopPropagation(); copyStreamResult('${escapeHtml(id)}')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> 전체 복사</button><button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteJob('${escapeHtml(id)}')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> 작업 제거</button></div>` : ''}
+            ${(job.status !== 'running' && sessionId) ? `<div class="stream-followup"><span class="stream-followup-label">이어서</span><div class="followup-input-wrap"><input type="text" class="followup-input" id="followupInput-${escapeHtml(id)}" placeholder="이 세션에 이어서 실행할 명령..." onkeydown="if(event.key==='Enter'){event.stopPropagation();sendFollowUp('${escapeHtml(id)}')}" onclick="event.stopPropagation()"><button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); sendFollowUp('${escapeHtml(id)}')" style="white-space:nowrap;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> 전송</button></div></div>` : ''}
+          </div>
+        </td>`;
+        // job 행 바로 뒤에 삽입
+        const jobRow = tbody.querySelector(`tr[data-job-id="${CSS.escape(id)}"]`);
+        if (jobRow && jobRow.nextSibling) {
+          tbody.insertBefore(expandTr, jobRow.nextSibling);
+        } else {
+          tbody.appendChild(expandTr);
+        }
+        initStream(id);
+      } else {
+        delete existingRows[expandKey];
+      }
+    } else if (existingExpand) {
+      // 접힌 상태인데 expand row가 남아있으면 제거
+      existingExpand.remove();
+      delete existingRows[expandKey];
+    }
+  }
+
+  // ── 삭제된 작업의 행 제거 ──
+  for (const [key, row] of Object.entries(existingRows)) {
+    row.remove();
+  }
+
+  // ── 행 순서 정렬 (DOM 순서가 정렬 순서와 다를 때만) ──
+  const currentOrder = [...tbody.querySelectorAll('tr[data-job-id]')].map(r => r.dataset.jobId);
+  if (JSON.stringify(currentOrder) !== JSON.stringify(newIds)) {
+    for (const nid of newIds) {
+      const row = tbody.querySelector(`tr[data-job-id="${CSS.escape(nid)}"]`);
+      if (row) tbody.appendChild(row);
+    }
+  }
+
+  // ── "완료 삭제" 버튼 표시/숨김 ──
+  const hasCompleted = jobs.some(j => j.status === 'done' || j.status === 'failed');
+  const deleteBtn = document.getElementById('btnDeleteCompleted');
+  deleteBtn.style.display = hasCompleted ? 'inline-flex' : 'none';
+}
+
+function updateJobRowStatus(jobId, status) {
+  const tbody = document.getElementById('jobTableBody');
+  const row = tbody.querySelector(`tr[data-job-id="${CSS.escape(jobId)}"]`);
+  if (!row || row.classList.contains('expand-row')) return;
+  const cells = row.querySelectorAll('td');
+  if (cells.length >= 2) {
+    const newBadge = statusBadgeHtml(status);
+    if (cells[1].innerHTML !== newBadge) cells[1].innerHTML = newBadge;
+  }
+}
+
+function toggleJobExpand(id) {
+  const tbody = document.getElementById('jobTableBody');
+  if (expandedJobId === id) {
+    // Collapse: stop stream polling, 직접 expand row 제거
+    stopStream(expandedJobId);
+    const expandRow = tbody.querySelector(`tr[data-job-id="${CSS.escape(id + '__expand')}"]`);
+    if (expandRow) expandRow.remove();
+    const jobRow = tbody.querySelector(`tr[data-job-id="${CSS.escape(id)}"]`);
+    if (jobRow) jobRow.className = '';
+    expandedJobId = null;
+  } else {
+    // Collapse previous if any
+    if (expandedJobId) {
+      stopStream(expandedJobId);
+      const prevExpand = tbody.querySelector(`tr[data-job-id="${CSS.escape(expandedJobId + '__expand')}"]`);
+      if (prevExpand) prevExpand.remove();
+      const prevRow = tbody.querySelector(`tr[data-job-id="${CSS.escape(expandedJobId)}"]`);
+      if (prevRow) prevRow.className = '';
+    }
+    expandedJobId = id;
+    // 캐시된 작업 데이터로 바로 expand row 생성 (다음 poll이 최신 상태 반영)
+    fetchJobs();
+  }
+}
+
+// ── Stream Polling ──
+function initStream(jobId) {
+  // If already streaming and not done, keep going
+  if (streamState[jobId] && streamState[jobId].timer) return;
+
+  if (!streamState[jobId]) {
+    streamState[jobId] = { offset: 0, timer: null, done: false, jobData: null, events: [] };
+  }
+
+  const state = streamState[jobId];
+  // Reset if re-opening
+  if (state.done && state.events.length > 0) {
+    // Already have all data, just re-render
+    renderStreamEvents(jobId);
+    return;
+  }
+
+  // Start polling
+  pollStream(jobId);
+  state.timer = setInterval(() => pollStream(jobId), 500);
+
+}
+
+function stopStream(jobId) {
+  const state = streamState[jobId];
+  if (!state) return;
+  if (state.timer) {
+    clearInterval(state.timer);
+    state.timer = null;
+  }
+}
+
+
+async function pollStream(jobId) {
+  const state = streamState[jobId];
+  if (!state || state.done) {
+    stopStream(jobId);
+    return;
+  }
+
+  try {
+    const data = await apiFetch(`/api/jobs/${encodeURIComponent(jobId)}/stream?offset=${state.offset}`);
+    const events = data.events || [];
+    const newOffset = data.offset !== undefined ? data.offset : state.offset + events.length;
+    const done = !!data.done;
+
+    if (events.length > 0) {
+      state.events = state.events.concat(events);
+      state.offset = newOffset;
+      renderStreamEvents(jobId);
+    }
+
+    if (done) {
+      state.done = true;
+      stopStream(jobId);
+      renderStreamDone(jobId);
+      // 상태 배지만 갱신 (전체 재렌더링 대신 다음 주기적 poll이 처리)
+      updateJobRowStatus(jobId, state.jobData ? state.jobData.status : 'done');
+    }
+  } catch {
+    // Network error — keep retrying silently
+  }
+}
+
+function renderStreamEvents(jobId) {
+  const container = document.getElementById(`streamContent-${jobId}`);
+  if (!container) return;
+
+  const state = streamState[jobId];
+  if (!state || state.events.length === 0) return;
+
+  // Check if user has scrolled up (not near bottom)
+  const wasAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 40;
+
+  let html = '';
+  for (const evt of state.events) {
+    const type = (evt.type || 'text').toLowerCase();
+    switch (type) {
+      case 'tool_use':
+        html += `<div class="stream-event stream-event-tool">
+          <span class="stream-tool-badge">${escapeHtml(evt.tool || 'Tool')}</span>
+          <span class="stream-tool-input">${escapeHtml(typeof evt.input === 'string' ? evt.input : JSON.stringify(evt.input || ''))}</span>
+        </div>`;
+        break;
+      case 'result':
+        html += `<div class="stream-event stream-event-result">
+          <span class="stream-result-icon">✓</span>
+          <span class="stream-result-text">${escapeHtml(typeof evt.result === 'string' ? evt.result : JSON.stringify(evt.result || ''))}</span>
+        </div>`;
+        // result 이벤트에서 session_id 추출하여 패널에 저장
+        if (evt.session_id) {
+          const panel = document.getElementById(`streamPanel-${jobId}`);
+          if (panel) panel.dataset.sessionId = evt.session_id;
+        }
+        break;
+      case 'error':
+        html += `<div class="stream-event stream-event-error">
+          <span class="stream-error-icon">✗</span>
+          <span class="stream-error-text">${escapeHtml(evt.text || evt.error || evt.message || 'Unknown error')}</span>
+        </div>`;
+        break;
+      case 'text':
+      default:
+        html += `<div class="stream-event stream-event-text">${escapeHtml(evt.text || '')}</div>`;
+        break;
+    }
+  }
+
+  container.innerHTML = html;
+
+  // Auto-scroll only if user was near bottom
+  if (wasAtBottom) {
+    container.scrollTop = container.scrollHeight;
+  }
+}
+
+function renderStreamDone(jobId) {
+  const panel = document.getElementById(`streamPanel-${jobId}`);
+  if (!panel) return;
+
+  // Add or update done banner
+  const state = streamState[jobId];
+  const status = state && state.jobData ? state.jobData.status : 'done';
+  const isFailed = status === 'failed';
+
+  let banner = panel.querySelector('.stream-done-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.className = `stream-done-banner${isFailed ? ' failed' : ''}`;
+    banner.textContent = isFailed ? '✗ 작업 실패' : '✓ 작업 완료';
+    panel.appendChild(banner);
+  }
+
+  // 액션 버튼 바 추가 (복사 + 삭제)
+  let actions = panel.querySelector('.stream-actions');
+  if (!actions) {
+    actions = document.createElement('div');
+    actions.className = 'stream-actions';
+    actions.innerHTML = `
+      <button class="btn btn-sm" onclick="event.stopPropagation(); copyStreamResult('${escapeHtml(jobId)}')">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        전체 복사
+      </button>
+      <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); deleteJob('${escapeHtml(jobId)}')">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        작업 제거
+      </button>`;
+    panel.appendChild(actions);
+  }
+
+  // 세션 이어가기 입력 추가 (session_id가 있는 경우)
+  const sessionId = panel.dataset.sessionId;
+  if (sessionId && !panel.querySelector('.stream-followup')) {
+    const followup = document.createElement('div');
+    followup.className = 'stream-followup';
+    followup.innerHTML = `
+      <span class="stream-followup-label">이어서</span>
+      <div class="followup-input-wrap">
+        <input type="text" class="followup-input" id="followupInput-${escapeHtml(jobId)}"
+               placeholder="이 세션에 이어서 실행할 명령..."
+               onkeydown="if(event.key==='Enter'){event.stopPropagation();sendFollowUp('${escapeHtml(jobId)}')}"
+               onclick="event.stopPropagation()">
+        <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); sendFollowUp('${escapeHtml(jobId)}')" style="white-space:nowrap;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> 전송
+        </button>
+      </div>`;
+    panel.appendChild(followup);
+  }
+}
+
+// ── Copy Stream Result ──
+function copyStreamResult(jobId) {
+  const state = streamState[jobId];
+  if (!state || state.events.length === 0) {
+    showToast('복사할 결과가 없습니다.', 'error');
+    return;
+  }
+
+  // 모든 이벤트 타입을 포함하여 전체 결과 복사
+  const textParts = [];
+  for (const evt of state.events) {
+    const type = (evt.type || 'text').toLowerCase();
+    switch (type) {
+      case 'text':
+        if (evt.text) textParts.push(evt.text);
+        break;
+      case 'result':
+        const r = typeof evt.result === 'string' ? evt.result : JSON.stringify(evt.result || '');
+        if (r) textParts.push(`[Result] ${r}`);
+        break;
+      case 'tool_use':
+        const toolName = evt.tool || 'Tool';
+        const toolInput = typeof evt.input === 'string' ? evt.input : JSON.stringify(evt.input || '');
+        textParts.push(`[${toolName}] ${toolInput}`);
+        break;
+      case 'error':
+        const errMsg = evt.text || evt.error || evt.message || 'Unknown error';
+        textParts.push(`[Error] ${errMsg}`);
+        break;
+    }
+  }
+
+  const text = textParts.join('\n').trim();
+  if (!text) {
+    showToast('복사할 텍스트 결과가 없습니다.', 'error');
+    return;
+  }
+
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('결과가 클립보드에 복사되었습니다.');
+  }).catch(() => {
+    showToast('클립보드 복사에 실패했습니다.', 'error');
+  });
+}
+
+// ── Delete Individual Job ──
+async function deleteJob(jobId) {
+  try {
+    await apiFetch(`/api/jobs/${encodeURIComponent(jobId)}`, { method: 'DELETE' });
+    // 스트림 상태 정리
+    if (streamState[jobId]) {
+      stopStream(jobId);
+      delete streamState[jobId];
+    }
+    if (expandedJobId === jobId) expandedJobId = null;
+    showToast('작업이 제거되었습니다.');
+    fetchJobs();
+  } catch (err) {
+    showToast(`제거 실패: ${err.message}`, 'error');
+  }
+}
+
+// ── Delete All Completed Jobs ──
+async function deleteCompletedJobs() {
+  try {
+    const data = await apiFetch('/api/jobs', { method: 'DELETE' });
+    const count = data.count || 0;
+    // 삭제된 작업의 스트림 상태 정리
+    for (const id of (data.deleted || [])) {
+      if (streamState[id]) {
+        stopStream(id);
+        delete streamState[id];
+      }
+      if (expandedJobId === id) expandedJobId = null;
+    }
+    showToast(`${count}개 완료 작업이 제거되었습니다.`);
+    fetchJobs();
+  } catch (err) {
+    showToast(`일괄 제거 실패: ${err.message}`, 'error');
+  }
+}
+
+// ── CWD badge ──
+function updateCwdBadge(path) {
+  const badge = document.getElementById('cwdBadge');
+  if (!path) {
+    badge.textContent = '';
+    return;
+  }
+  const parts = path.replace(/\/+$/, '').split('/');
+  const folderName = parts[parts.length - 1] || path;
+  badge.textContent = folderName;
+  badge.title = path;
+}
+
+// ── Recent Directories (서버 파일 기반 영속 저장) ──
+const MAX_RECENT_DIRS = 8;
+let _recentDirsCache = [];  // 메모리 캐시 (서버 왕복 최소화)
+
+function getRecentDirs() {
+  return _recentDirsCache;
+}
+
+async function loadRecentDirs() {
+  try {
+    const res = await apiFetch('/api/recent-dirs');
+    _recentDirsCache = Array.isArray(res) ? res : [];
+  } catch { _recentDirsCache = []; }
+  renderRecentDirs();
+}
+
+function _saveRecentDirs() {
+  apiFetch('/api/recent-dirs', {
+    method: 'POST',
+    body: JSON.stringify({ dirs: _recentDirsCache })
+  }).catch(() => {});
+}
+
+function addRecentDir(path) {
+  if (!path) return;
+  _recentDirsCache = _recentDirsCache.filter(d => d !== path);
+  _recentDirsCache.unshift(path);
+  if (_recentDirsCache.length > MAX_RECENT_DIRS) _recentDirsCache = _recentDirsCache.slice(0, MAX_RECENT_DIRS);
+  _saveRecentDirs();
+  renderRecentDirs();
+}
+
+function removeRecentDir(path) {
+  _recentDirsCache = _recentDirsCache.filter(d => d !== path);
+  _saveRecentDirs();
+  if (document.getElementById('cwdInput').value === path) {
+    clearDirSelection();
+  }
+  renderRecentDirs();
+}
+
+function renderRecentDirs() {
+  const container = document.getElementById('recentDirs');
+  const dirs = _recentDirsCache;
+  const currentCwd = document.getElementById('cwdInput').value;
+
+  if (dirs.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+
+  let html = '<span class="recent-dirs-label">최근</span>';
+  html += dirs.map(dir => {
+    const parts = dir.replace(/\/+$/, '').split('/');
+    const name = parts[parts.length - 1] || dir;
+    const isActive = dir === currentCwd ? ' active' : '';
+    const escapedDir = dir.replace(/'/g, "\\'");
+    return `<span class="recent-chip${isActive}" onclick="selectRecentDir('${escapedDir}')" title="${dir}">
+      <span class="recent-chip-name">${name}</span>
+      <button class="recent-chip-remove" onclick="event.stopPropagation(); removeRecentDir('${escapedDir}')" title="제거">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </span>`;
+  }).join('');
+
+  container.innerHTML = html;
+}
+
+function selectRecentDir(path) {
+  document.getElementById('cwdInput').value = path;
+  updateCwdBadge(path);
+  const text = document.getElementById('dirPickerText');
+  text.textContent = path;
+  document.getElementById('dirPickerDisplay').classList.add('has-value');
+  document.getElementById('dirPickerClear').classList.add('visible');
+  // 칩 active 상태만 갱신 (순서 변경 없이)
+  renderRecentDirs();
+  // 디렉토리 브라우저가 열려 있으면 해당 경로로 탐색, 아니면 상태만 동기화
+  if (dirBrowserOpen) {
+    browseTo(path);
+  } else {
+    dirBrowserCurrentPath = path;
+  }
+}
+
+// ── Inline Directory Browser ──
+let dirBrowserCurrentPath = '';
+let dirBrowserOpen = false;
+
+function toggleDirBrowser() {
+  if (dirBrowserOpen) {
+    closeDirBrowser();
+  } else {
+    openDirBrowser();
+  }
+}
+
+function openDirBrowser() {
+  const panel = document.getElementById('dirBrowserPanel');
+  const chevron = document.getElementById('dirPickerChevron');
+  const currentCwd = document.getElementById('cwdInput').value;
+  const startPath = currentCwd || '~';
+
+  panel.classList.add('open');
+  if (chevron) chevron.style.transform = 'rotate(180deg)';
+  dirBrowserOpen = true;
+  browseTo(startPath);
+}
+
+function closeDirBrowser() {
+  const panel = document.getElementById('dirBrowserPanel');
+  const chevron = document.getElementById('dirPickerChevron');
+  if (panel) panel.classList.remove('open');
+  if (chevron) chevron.style.transform = '';
+  dirBrowserOpen = false;
+}
+
+async function browseTo(path) {
+  const list = document.getElementById('dirList');
+  const breadcrumb = document.getElementById('dirBreadcrumb');
+  const currentDisplay = document.getElementById('dirCurrentPath');
+
+  list.innerHTML = '<div class="dir-modal-loading"><span class="spinner"></span> 불러오는 중...</div>';
+
+  try {
+    const data = await apiFetch(`/api/dirs?path=${encodeURIComponent(path)}`);
+    dirBrowserCurrentPath = data.current;
+    currentDisplay.textContent = data.current;
+    currentDisplay.title = data.current;
+
+    // 폴더 탐색 시 즉시 작업 디렉토리에 반영
+    document.getElementById('cwdInput').value = data.current;
+    document.getElementById('dirPickerText').textContent = data.current;
+    document.getElementById('dirPickerDisplay').classList.add('has-value');
+    document.getElementById('dirPickerClear').classList.add('visible');
+
+    renderBreadcrumb(data.current, breadcrumb);
+
+    const dirs = data.entries.filter(e => e.type === 'dir');
+    if (dirs.length === 0) {
+      list.innerHTML = '<div class="dir-modal-loading" style="color:var(--text-muted);">하위 디렉토리가 없습니다</div>';
+      return;
+    }
+
+    list.innerHTML = dirs.map(entry => {
+      const isParent = entry.name === '..';
+      const icon = isParent
+        ? '<svg class="dir-item-icon is-parent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>'
+        : '<svg class="dir-item-icon is-dir" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
+      const label = isParent ? '상위 디렉토리' : entry.name;
+      return `<div class="dir-item" onclick="browseTo('${entry.path.replace(/'/g, "\\'")}')">
+        ${icon}
+        <span class="dir-item-name is-dir">${label}</span>
+      </div>`;
+    }).join('');
+
+  } catch (err) {
+    list.innerHTML = `<div class="dir-modal-loading" style="color:var(--red);">불러오기 실패: ${err.message}</div>`;
+  }
+}
+
+function renderBreadcrumb(fullPath, container) {
+  const parts = fullPath.split('/').filter(Boolean);
+  let html = `<span class="breadcrumb-seg" onclick="browseTo('/')">/</span>`;
+  let accumulated = '';
+  for (const part of parts) {
+    accumulated += '/' + part;
+    const p = accumulated;
+    html += `<span class="breadcrumb-sep">/</span><span class="breadcrumb-seg" onclick="browseTo('${p.replace(/'/g, "\\'")}')">${part}</span>`;
+  }
+  container.innerHTML = html;
+}
+
+function selectCurrentDir() {
+  if (!dirBrowserCurrentPath) return;
+  document.getElementById('cwdInput').value = dirBrowserCurrentPath;
+  updateCwdBadge(dirBrowserCurrentPath);
+
+  const text = document.getElementById('dirPickerText');
+  text.textContent = dirBrowserCurrentPath;
+  document.getElementById('dirPickerDisplay').classList.add('has-value');
+  document.getElementById('dirPickerClear').classList.add('visible');
+
+  addRecentDir(dirBrowserCurrentPath);
+  closeDirBrowser();
+}
+
+function clearDirSelection() {
+  document.getElementById('cwdInput').value = '';
+  updateCwdBadge('');
+  const text = document.getElementById('dirPickerText');
+  text.textContent = '디렉토리를 선택하세요...';
+  document.getElementById('dirPickerDisplay').classList.remove('has-value');
+  document.getElementById('dirPickerClear').classList.remove('visible');
+  renderRecentDirs();
+}
+
+// ESC 키로 패널 닫기
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    closeDirBrowser();
+  }
+});
+
+// ── Refresh All ──
+function refreshAll() {
+  checkStatus();
+  fetchJobs();
+  showToast('전체 새로고침 완료');
+}
+
+// ── Initialize ──
+function init() {
+  loadRecentDirs();
+  checkStatus();
+  fetchJobs();
+
+  // Auto-refresh jobs every 3 seconds
+  jobPollTimer = setInterval(fetchJobs, 3000);
+
+  // Check status every 10 seconds
+  setInterval(checkStatus, 10000);
+
+  // Keyboard shortcut: Enter to send, Shift+Enter for newline
+  document.getElementById('promptInput').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      document.getElementById('sendForm').dispatchEvent(new Event('submit'));
+    }
+  });
+
+  // ── File Drag & Drop (이미지 + 일반 파일) ──
+  const wrapper = document.getElementById('promptWrapper');
+  let dragCounter = 0;
+
+  wrapper.addEventListener('dragenter', function(e) {
+    e.preventDefault();
+    dragCounter++;
+    wrapper.classList.add('drag-over');
+  });
+
+  wrapper.addEventListener('dragover', function(e) {
+    e.preventDefault();
+  });
+
+  wrapper.addEventListener('dragleave', function(e) {
+    e.preventDefault();
+    dragCounter--;
+    if (dragCounter <= 0) {
+      dragCounter = 0;
+      wrapper.classList.remove('drag-over');
+    }
+  });
+
+  wrapper.addEventListener('drop', function(e) {
+    e.preventDefault();
+    dragCounter = 0;
+    wrapper.classList.remove('drag-over');
+    if (e.dataTransfer.files.length > 0) {
+      handleFiles(e.dataTransfer.files);
+    }
+  });
+
+  // ── Clipboard Paste (이미지 + 파일) ──
+  document.getElementById('promptInput').addEventListener('paste', function(e) {
+    const files = e.clipboardData?.files;
+    if (files && files.length > 0) {
+      handleFiles(files);
+    }
+  });
+
+  // ── File Picker (📎 버튼) ──
+  document.getElementById('filePickerInput').addEventListener('change', function(e) {
+    if (e.target.files.length > 0) {
+      handleFiles(e.target.files);
+      e.target.value = '';  // 같은 파일 재선택 가능하도록 리셋
+    }
+  });
+}
+
+init();
+</script>
+</body>
+</html>

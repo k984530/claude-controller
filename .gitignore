@@ -1,0 +1,14 @@
+# Runtime data
+logs/
+sessions/
+data/
+queue/
+worktrees/
+uploads/
+service/*.pid
+
+# Python
+__pycache__/
+
+# OS
+.DS_Store

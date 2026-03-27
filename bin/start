@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# ============================================================
+# start — Controller 서비스 + TUI 일괄 실행
+# Usage: ./start [--repo /path/to/git/repo]
+# ============================================================
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "${SCRIPT_DIR}/config.sh"
+
+# 옵션 파싱
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --repo)
+      export TARGET_REPO="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+# 사전 검증
+if [[ -z "$CLAUDE_BIN" ]]; then
+  echo "[오류] claude CLI를 찾을 수 없습니다."; exit 1
+fi
+if ! command -v python3 &>/dev/null; then
+  echo "[오류] python3가 필요합니다."; exit 1
+fi
+
+mkdir -p "$LOGS_DIR" "$QUEUE_DIR" "$SESSIONS_DIR" "$WORKTREES_DIR"
+
+echo ""
+echo "  ╔══════════════════════════════════════════╗"
+echo "  ║   Controller Service + TUI               ║"
+echo "  ╚══════════════════════════════════════════╝"
+echo ""
+
+# 컨트롤러 서비스 시작
+if [[ -f "$PID_FILE" ]] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+  echo "  [서비스] 이미 실행 중 (PID: $(cat "$PID_FILE"))"
+else
+  echo "  [서비스] 컨트롤러 데몬 시작 중..."
+  bash "${SCRIPT_DIR}/service/controller.sh" start &
+  sleep 2
+  if [[ -f "$PID_FILE" ]]; then
+    echo "  [서비스] 시작됨 (PID: $(cat "$PID_FILE"))"
+  fi
+fi
+
+echo ""
+echo "  [TUI] 터미널 프로그램을 시작합니다..."
+echo "  [TUI] 종료: q 키"
+echo ""
+
+# Ctrl+C로 서비스도 함께 종료
+cleanup_all() {
+  if [[ -f "$PID_FILE" ]]; then
+    kill "$(cat "$PID_FILE")" 2>/dev/null
+  fi
+  echo ""
+  echo "  종료됨."
+}
+trap cleanup_all INT TERM
+
+# TUI 포그라운드 실행
+sleep 1
+exec python3 "${SCRIPT_DIR}/bin/tui"
