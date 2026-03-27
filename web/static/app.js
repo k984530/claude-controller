@@ -132,7 +132,8 @@ function _renderSessionItem(s) {
   const costLabel = s.cost_usd != null ? '$' + Number(s.cost_usd).toFixed(4) : '';
   const timeLabel = s.timestamp ? s.timestamp.replace(/^\d{4}-/, '') : '';
   return '<div class="session-item" data-sid="' + escapeHtml(s.session_id)
-    + '" data-prompt="' + escapeHtml(s.prompt || '') + '">'
+    + '" data-prompt="' + escapeHtml(s.prompt || '')
+    + '" data-cwd="' + escapeHtml(s.cwd || '') + '">'
     + '<div class="session-item-row">'
     + '<span class="session-item-status ' + escapeHtml(statusClass) + '"></span>'
     + '<span class="session-item-id">' + escapeHtml(s.session_id.slice(0, 8)) + '</span>'
@@ -306,11 +307,16 @@ function _toggleProjectFilter() {
   _filterSessions(searchInput ? searchInput.value : '');
 }
 
-function _selectSession(sid, prompt) {
+function _selectSession(sid, prompt, cwd) {
   _contextSessionId = sid;
   _contextSessionPrompt = prompt;
   _updateContextUI();
   _closeSessionPicker();
+  // 세션의 cwd로 디렉터리 + 최근 프로젝트 칩 동기화
+  if (cwd) {
+    addRecentDir(cwd);
+    selectRecentDir(cwd);
+  }
   showToast(t('msg_session_select') + ': ' + sid.slice(0, 8) + '...');
 }
 
@@ -321,7 +327,7 @@ function _closeSessionPicker() {
 document.addEventListener('click', function(e) {
   var item = e.target.closest('.session-item');
   if (item && item.dataset.sid) {
-    _selectSession(item.dataset.sid, item.dataset.prompt || '');
+    _selectSession(item.dataset.sid, item.dataset.prompt || '', item.dataset.cwd || '');
     return;
   }
   var picker = document.getElementById('sessionPicker');
@@ -533,6 +539,8 @@ async function handleFiles(files) {
 
     try {
       const data = await uploadFile(file);
+      // 업로드 중 사용자가 첨부를 제거했거나 폼이 초기화된 경우 무시
+      if (!attachments[tempIdx]) continue;
       attachments[tempIdx].serverPath = data.path;
       attachments[tempIdx].filename = data.filename || file.name;
       thumb.classList.remove('uploading');
@@ -541,8 +549,8 @@ async function handleFiles(files) {
       insertAtCursor(ta, `@image${tempIdx}`);
     } catch (err) {
       showToast(`${t('msg_upload_failed')}: ${escapeHtml(file.name)} — ${err.message}`, 'error');
-      attachments[tempIdx] = null;
-      thumb.remove();
+      if (attachments[tempIdx]) attachments[tempIdx] = null;
+      if (thumb.parentNode) thumb.remove();
       updateAttachBadge();
     }
   }
@@ -615,15 +623,16 @@ function statusBadgeHtml(status) {
   return `<span class="badge ${cls[s] || 'badge-pending'}">${labels[s] || s}</span>`;
 }
 
-function jobActionsHtml(id, status, sessionId) {
+function jobActionsHtml(id, status, sessionId, cwd) {
   const isRunning = status === 'running';
+  const escapedCwd = escapeHtml(cwd || '');
   let btns = '';
   if (!isRunning) {
     btns += `<button class="btn-retry-job" onclick="event.stopPropagation(); retryJob('${escapeHtml(id)}')" title="같은 프롬프트로 다시 실행"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>`;
   }
   if (sessionId) {
     btns += `<button class="btn-continue-job" onclick="event.stopPropagation(); openFollowUp('${escapeHtml(id)}')" title="세션 이어서 명령 (resume)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg></button>`;
-    btns += `<button class="btn-fork-job" onclick="event.stopPropagation(); quickForkSession('${escapeHtml(sessionId)}')" title="이 세션에서 분기 (fork)" style="color:var(--yellow);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M6 9v3c0 3.3 2.7 6 6 6h3"/></svg></button>`;
+    btns += `<button class="btn-fork-job" onclick="event.stopPropagation(); quickForkSession('${escapeHtml(sessionId)}', '${escapedCwd}')" title="이 세션에서 분기 (fork)" style="color:var(--yellow);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M6 9v3c0 3.3 2.7 6 6 6h3"/></svg></button>`;
   }
   if (!isRunning) {
     btns += `<button class="btn-delete-job" onclick="event.stopPropagation(); deleteJob('${escapeHtml(id)}')" title="작업 제거"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>`;
@@ -633,22 +642,32 @@ function jobActionsHtml(id, status, sessionId) {
 }
 
 // 작업 목록에서 직접 fork 세션 선택
-function quickForkSession(sessionId) {
+function quickForkSession(sessionId, cwd) {
   _contextMode = 'fork';
   _contextSessionId = sessionId;
   _contextSessionPrompt = null;
   _updateContextUI();
+  // 세션의 cwd로 디렉터리 + 최근 프로젝트 칩 동기화
+  if (cwd) {
+    addRecentDir(cwd);
+    selectRecentDir(cwd);
+  }
   showToast(t('msg_fork_mode') + ' (' + sessionId.slice(0, 8) + '...). ' + t('msg_fork_input'));
   document.getElementById('promptInput').focus();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 // 작업 목록의 세션 ID 클릭 → resume 모드로 전환
-function resumeFromJob(sessionId, promptHint) {
+function resumeFromJob(sessionId, promptHint, cwd) {
   _contextMode = 'resume';
   _contextSessionId = sessionId;
   _contextSessionPrompt = promptHint || null;
   _updateContextUI();
+  // 세션의 cwd로 디렉터리 + 최근 프로젝트 칩 동기화
+  if (cwd) {
+    addRecentDir(cwd);
+    selectRecentDir(cwd);
+  }
   showToast('Resume 모드: ' + sessionId.slice(0, 8) + '... 세션에 이어서 전송합니다.');
   document.getElementById('promptInput').focus();
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -851,10 +870,10 @@ function renderJobs(jobs) {
           if (job.session_id) {
             cells[4].className = 'job-session clickable';
             cells[4].title = job.session_id;
-            cells[4].setAttribute('onclick', `event.stopPropagation(); resumeFromJob('${escapeHtml(job.session_id)}', '${escapeHtml(truncate(job.prompt, 40))}')`);
+            cells[4].setAttribute('onclick', `event.stopPropagation(); resumeFromJob('${escapeHtml(job.session_id)}', '${escapeHtml(truncate(job.prompt, 40))}', '${escapeHtml(job.cwd || '')}')`);
           }
         }
-        const newActions = jobActionsHtml(id, job.status, job.session_id);
+        const newActions = jobActionsHtml(id, job.status, job.session_id, job.cwd);
         if (cells[6].innerHTML !== newActions) {
           cells[6].innerHTML = newActions;
         }
@@ -871,9 +890,9 @@ function renderJobs(jobs) {
         <td>${statusBadgeHtml(job.status)}</td>
         <td class="prompt-cell" title="${escapeHtml(job.prompt)}">${renderPromptHtml(job.prompt)}</td>
         <td class="job-cwd" title="${escapeHtml(job.cwd || '')}">${escapeHtml(formatCwd(job.cwd))}</td>
-        <td class="job-session${job.session_id ? ' clickable' : ''}" title="${escapeHtml(job.session_id || '')}" ${job.session_id ? `onclick="event.stopPropagation(); resumeFromJob('${escapeHtml(job.session_id)}', '${escapeHtml(truncate(job.prompt, 40))}')"` : ''}>${job.session_id ? escapeHtml(job.session_id.slice(0, 8)) : (job.status === 'running' ? '<span style="color:var(--text-muted);font-size:0.7rem;">—</span>' : '-')}</td>
+        <td class="job-session${job.session_id ? ' clickable' : ''}" title="${escapeHtml(job.session_id || '')}" ${job.session_id ? `onclick="event.stopPropagation(); resumeFromJob('${escapeHtml(job.session_id)}', '${escapeHtml(truncate(job.prompt, 40))}', '${escapeHtml(job.cwd || '')}')"` : ''}>${job.session_id ? escapeHtml(job.session_id.slice(0, 8)) : (job.status === 'running' ? '<span style="color:var(--text-muted);font-size:0.7rem;">—</span>' : '-')}</td>
         <td class="job-time">${formatTime(job.created || job.created_at)}</td>
-        <td>${jobActionsHtml(id, job.status, job.session_id)}</td>`;
+        <td>${jobActionsHtml(id, job.status, job.session_id, job.cwd)}</td>`;
       tbody.appendChild(tr);
     } else {
       delete existingRows[id];
@@ -1132,7 +1151,8 @@ function renderStreamEvents(jobId) {
               cells[4].textContent = evt.session_id.slice(0, 8);
               cells[4].className = 'job-session clickable';
               cells[4].title = evt.session_id;
-              cells[4].setAttribute('onclick', `event.stopPropagation(); resumeFromJob('${escapeHtml(evt.session_id)}', '')`);
+              const evtCwd = panel ? (panel.dataset.cwd || '') : '';
+              cells[4].setAttribute('onclick', `event.stopPropagation(); resumeFromJob('${escapeHtml(evt.session_id)}', '', '${escapeHtml(evtCwd)}')`);
             }
           }
         }
@@ -1390,6 +1410,12 @@ function renderRecentDirs() {
 }
 
 function selectRecentDir(path) {
+  const current = document.getElementById('cwdInput').value;
+  // 같은 칩을 다시 클릭하면 선택 해제
+  if (current === path) {
+    clearDirSelection();
+    return;
+  }
   document.getElementById('cwdInput').value = path;
   updateCwdBadge(path);
   const text = document.getElementById('dirPickerText');
@@ -1453,6 +1479,7 @@ async function browseTo(path) {
     document.getElementById('dirPickerText').textContent = data.current;
     document.getElementById('dirPickerDisplay').classList.add('has-value');
     document.getElementById('dirPickerClear').classList.add('visible');
+    renderRecentDirs();
 
     renderBreadcrumb(data.current, breadcrumb);
 
@@ -1503,6 +1530,7 @@ function selectCurrentDir() {
 
   addRecentDir(dirBrowserCurrentPath);
   closeDirBrowser();
+  renderRecentDirs();
 }
 
 function clearDirSelection() {

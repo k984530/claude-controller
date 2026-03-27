@@ -1,6 +1,6 @@
 {
   "name": "claude-controller",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Claude Code headless daemon controller — FIFO-based async task dispatch, Git Worktree isolation, auto-checkpointing, and a web dashboard",
   "license": "MIT",
   "author": "choiwon",
@@ -56,6 +56,10 @@
   },
   "repository": {
     "type": "git",
-    "url": ""
-  }
+    "url": "git+https://github.com/k984530/controller.git"
+  },
+  "bugs": {
+    "url": "https://github.com/k984530/controller/issues"
+  },
+  "homepage": "https://github.com/k984530/controller#readme"
 }
