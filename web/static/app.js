@@ -46,6 +46,37 @@ function truncate(str, len = 60) {
   return str.length > len ? str.slice(0, len) + '...' : str;
 }
 
+function renderPromptHtml(prompt) {
+  if (!prompt) return '-';
+  const text = truncate(prompt, 200);
+  const escaped = escapeHtml(text);
+  return escaped.replace(/@(\/[^\s,]+|image\d+)/g, (match, ref) => {
+    const isImage = ref.startsWith('image');
+    const label = isImage ? ref : ref.split('/').pop();
+    const icon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>';
+    return `<span class="prompt-img-chip" title="${escapeHtml('@' + ref)}">${icon}${escapeHtml(label)}</span>`;
+  });
+}
+
+function updatePromptMirror() {
+  const ta = document.getElementById('promptInput');
+  const mirror = document.getElementById('promptMirror');
+  if (!ta || !mirror) return;
+  const val = ta.value;
+  if (!val) {
+    mirror.innerHTML = '';
+    return;
+  }
+  const escaped = escapeHtml(val);
+  const chipIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>';
+  const html = escaped.replace(/@(\/[^\s,]+|image\d+)/g, (match, ref) => {
+    const label = ref.startsWith('image') ? ref : ref.split('/').pop();
+    return `<span class="prompt-img-chip" title="${escapeHtml('@' + ref)}">${chipIcon}${escapeHtml(label)}</span>`;
+  });
+  mirror.innerHTML = html + '\n';
+  mirror.scrollTop = ta.scrollTop;
+}
+
 function formatTime(ts) {
   if (!ts) return '-';
   try {
@@ -179,7 +210,7 @@ function _renderSessionList(sessions, grouped) {
     if (noProject.length > 0) {
       html += '<div class="session-group-header">'
         + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'
-        + '프로젝트 미지정'
+        + t('no_project')
         + '<span class="session-group-count">' + noProject.length + '</span>'
         + '</div>';
       html += noProject.map(_renderSessionItem).join('');
@@ -221,9 +252,9 @@ async function openSessionPicker(mode) {
   _contextSessionPrompt = null;
   _updateContextUI();
   document.getElementById('sessionPickerTitle').textContent =
-    mode === 'resume' ? '이어갈 세션 선택' : '분기할 세션 선택';
+    t('select_session');
   const list = document.getElementById('sessionPickerList');
-  list.innerHTML = '<div class="session-empty"><span class="spinner" style="display:block;margin:0 auto 8px;"></span>로드 중...</div>';
+  list.innerHTML = '<div class="session-empty"><span class="spinner" style="display:block;margin:0 auto 8px;"></span></div>';
   // 검색 초기화
   const searchInput = document.getElementById('sessionSearchInput');
   if (searchInput) searchInput.value = '';
@@ -390,6 +421,23 @@ function insertAtCursor(textarea, text) {
   const newPos = start + space.length + text.length + 1;
   textarea.selectionStart = textarea.selectionEnd = newPos;
   textarea.focus();
+  updatePromptMirror();
+}
+
+function updatePromptMirror() {
+  const ta = document.getElementById('promptInput');
+  const mirror = document.getElementById('promptMirror');
+  if (!ta || !mirror) return;
+  const val = ta.value;
+  if (!val) { mirror.innerHTML = ''; return; }
+  const escaped = escapeHtml(val);
+  const chipIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>';
+  mirror.innerHTML = escaped.replace(/@image(\d+)/g, (match, idx) => {
+    const att = attachments[parseInt(idx)];
+    const label = att ? (att.filename || match) : match;
+    return `<span class="prompt-img-chip" title="${escapeHtml(match)}">${chipIcon}${escapeHtml(label)}</span>`;
+  });
+  mirror.scrollTop = ta.scrollTop;
 }
 
 function formatFileSize(bytes) {
@@ -431,17 +479,20 @@ function removeAttachment(idx) {
   const ta = document.getElementById('promptInput');
   ta.value = ta.value.replace(new RegExp(`\\s*@image${idx}\\b`, 'g'), '');
   updateAttachBadge();
+  updatePromptMirror();
 }
 
 function clearAttachments() {
   attachments.length = 0;
   document.getElementById('attachmentPreviews').innerHTML = '';
   updateAttachBadge();
+  updatePromptMirror();
 }
 
 function clearPromptForm() {
   document.getElementById('promptInput').value = '';
   clearAttachments();
+  updatePromptMirror();
   if (typeof clearDirSelection === 'function') clearDirSelection();
 }
 
@@ -590,6 +641,17 @@ function quickForkSession(sessionId) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+// 작업 목록의 세션 ID 클릭 → resume 모드로 전환
+function resumeFromJob(sessionId, promptHint) {
+  _contextMode = 'resume';
+  _contextSessionId = sessionId;
+  _contextSessionPrompt = promptHint || null;
+  _updateContextUI();
+  showToast('Resume 모드: ' + sessionId.slice(0, 8) + '... 세션에 이어서 전송합니다.');
+  document.getElementById('promptInput').focus();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
 function openFollowUp(jobId) {
   if (expandedJobId !== jobId) {
     toggleJobExpand(jobId);
@@ -695,7 +757,7 @@ function renderJobs(jobs) {
   if (jobs.length === 0) {
     tbody.innerHTML = `<tr data-job-id="__empty__"><td colspan="7" class="empty-state">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:40px;height:40px;margin-bottom:12px;opacity:0.3;"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
-      <div>작업이 없습니다</div>
+      <div>${t('no_jobs')}</div>
     </td></tr>`;
     return;
   }
@@ -744,9 +806,15 @@ function renderJobs(jobs) {
           cells[3].innerHTML = newCwd;
           cells[3].title = job.cwd || '';
         }
-        const newSession = job.session_id ? job.session_id.slice(0, 8) : '-';
-        if (cells[4].textContent !== newSession) cells[4].textContent = newSession;
-        if (job.session_id) cells[4].title = job.session_id;
+        const newSession = job.session_id ? job.session_id.slice(0, 8) : (job.status === 'running' ? '—' : '-');
+        if (cells[4].textContent !== newSession) {
+          cells[4].textContent = newSession;
+          if (job.session_id) {
+            cells[4].className = 'job-session clickable';
+            cells[4].title = job.session_id;
+            cells[4].setAttribute('onclick', `event.stopPropagation(); resumeFromJob('${escapeHtml(job.session_id)}', '${escapeHtml(truncate(job.prompt, 40))}')`);
+          }
+        }
         const newActions = jobActionsHtml(id, job.status, job.session_id);
         if (cells[6].innerHTML !== newActions) {
           cells[6].innerHTML = newActions;
@@ -762,9 +830,9 @@ function renderJobs(jobs) {
       tr.innerHTML = `
         <td class="job-id">${escapeHtml(String(id).slice(0, 8))}</td>
         <td>${statusBadgeHtml(job.status)}</td>
-        <td class="prompt-cell" title="${escapeHtml(job.prompt)}">${escapeHtml(truncate(job.prompt))}</td>
+        <td class="prompt-cell" title="${escapeHtml(job.prompt)}">${renderPromptHtml(job.prompt)}</td>
         <td class="job-cwd" title="${escapeHtml(job.cwd || '')}">${escapeHtml(formatCwd(job.cwd))}</td>
-        <td class="job-session" title="${escapeHtml(job.session_id || '')}">${job.session_id ? escapeHtml(job.session_id.slice(0, 8)) : '-'}</td>
+        <td class="job-session${job.session_id ? ' clickable' : ''}" title="${escapeHtml(job.session_id || '')}" ${job.session_id ? `onclick="event.stopPropagation(); resumeFromJob('${escapeHtml(job.session_id)}', '${escapeHtml(truncate(job.prompt, 40))}')"` : ''}>${job.session_id ? escapeHtml(job.session_id.slice(0, 8)) : (job.status === 'running' ? '<span style="color:var(--text-muted);font-size:0.7rem;">—</span>' : '-')}</td>
         <td class="job-time">${formatTime(job.created || job.created_at)}</td>
         <td>${jobActionsHtml(id, job.status, job.session_id)}</td>`;
       tbody.appendChild(tr);
@@ -786,7 +854,6 @@ function renderJobs(jobs) {
           <div class="stream-panel" id="streamPanel-${escapeHtml(id)}" data-session-id="${escapeHtml(sessionId)}" data-cwd="${escapeHtml(jobCwd)}">
             <div class="stream-content" id="streamContent-${escapeHtml(id)}">
               <div class="stream-empty">
-                ${job.status === 'running' ? '<div class="stream-spinner" style="margin:0 auto 8px;"></div>' : ''}
                 스트림 데이터를 불러오는 중...
               </div>
             </div>
@@ -809,6 +876,44 @@ function renderJobs(jobs) {
     } else if (existingExpand) {
       existingExpand.remove();
       delete existingRows[expandKey];
+    }
+
+    // ── 실행 중인 작업: 미리보기 행 (마지막 2줄) ──
+    const previewKey = id + '__preview';
+    const existingPreview = existingRows[previewKey] || tbody.querySelector(`tr[data-job-id="${CSS.escape(previewKey)}"]`);
+
+    if (job.status === 'running' && !isExpanded) {
+      // 스트림 자동 시작
+      if (!streamState[id]) {
+        streamState[id] = { offset: 0, timer: null, done: false, jobData: job, events: [] };
+      }
+      if (!streamState[id].timer) {
+        initStream(id);
+      }
+      // 미리보기 행 생성/갱신
+      if (!existingPreview) {
+        const pvTr = document.createElement('tr');
+        pvTr.className = 'preview-row';
+        pvTr.dataset.jobId = previewKey;
+        pvTr.innerHTML = `<td colspan="7"><div class="job-preview" id="jobPreview-${escapeHtml(id)}"><span class="preview-text">대기 중...</span></div></td>`;
+        const jobRow = tbody.querySelector(`tr[data-job-id="${CSS.escape(id)}"]`);
+        if (jobRow && jobRow.nextSibling) {
+          tbody.insertBefore(pvTr, jobRow.nextSibling);
+        } else {
+          tbody.appendChild(pvTr);
+        }
+        newIds.splice(newIds.indexOf(id) + 1, 0, previewKey);
+      } else {
+        delete existingRows[previewKey];
+        newIds.splice(newIds.indexOf(id) + 1, 0, previewKey);
+      }
+      updateJobPreview(id);
+    } else {
+      // 실행 완료 또는 expand 상태 — 미리보기 제거
+      if (existingPreview) {
+        existingPreview.remove();
+        delete existingRows[previewKey];
+      }
     }
   }
 
@@ -863,6 +968,31 @@ function toggleJobExpand(id) {
 }
 
 // ── Stream Polling ──
+// ── 실행 중 작업 미리보기 갱신 (마지막 2줄) ──
+function updateJobPreview(jobId) {
+  const el = document.getElementById(`jobPreview-${jobId}`);
+  if (!el) return;
+
+  const state = streamState[jobId];
+  if (!state || state.events.length === 0) return;
+
+  // 마지막 2개 이벤트에서 텍스트 추출
+  const recent = state.events.slice(-2);
+  const lines = recent.map(evt => {
+    if (evt.type === 'tool_use') {
+      return `<span class="preview-tool">${escapeHtml(evt.tool || 'Tool')}</span> ${escapeHtml((typeof evt.input === 'string' ? evt.input : JSON.stringify(evt.input || '')).slice(0, 120))}`;
+    }
+    if (evt.type === 'result') {
+      return escapeHtml((typeof evt.result === 'string' ? evt.result : '').slice(0, 120));
+    }
+    return escapeHtml((evt.text || '').split('\n').pop().slice(0, 120));
+  }).filter(Boolean);
+
+  if (lines.length > 0) {
+    el.innerHTML = `<div class="preview-lines">${lines.map(l => `<div class="preview-line">${l}</div>`).join('')}</div>`;
+  }
+}
+
 function initStream(jobId) {
   if (streamState[jobId] && streamState[jobId].timer) return;
 
@@ -907,6 +1037,7 @@ async function pollStream(jobId) {
       state.events = state.events.concat(events);
       state.offset = newOffset;
       renderStreamEvents(jobId);
+      updateJobPreview(jobId);
     }
 
     if (done) {
@@ -914,6 +1045,9 @@ async function pollStream(jobId) {
       stopStream(jobId);
       renderStreamDone(jobId);
       updateJobRowStatus(jobId, state.jobData ? state.jobData.status : 'done');
+      // 완료 시 미리보기 행 제거
+      const pvRow = document.querySelector(`tr[data-job-id="${CSS.escape(jobId + '__preview')}"]`);
+      if (pvRow) pvRow.remove();
     }
   } catch {
     // Network error — keep retrying silently
@@ -947,6 +1081,17 @@ function renderStreamEvents(jobId) {
         if (evt.session_id) {
           const panel = document.getElementById(`streamPanel-${jobId}`);
           if (panel) panel.dataset.sessionId = evt.session_id;
+          // 테이블 행의 Session ID 셀도 즉시 업데이트
+          const jobRow = document.querySelector(`tr[data-job-id="${CSS.escape(jobId)}"]`);
+          if (jobRow) {
+            const cells = jobRow.querySelectorAll('td');
+            if (cells.length >= 5 && cells[4].textContent !== evt.session_id.slice(0, 8)) {
+              cells[4].textContent = evt.session_id.slice(0, 8);
+              cells[4].className = 'job-session clickable';
+              cells[4].title = evt.session_id;
+              cells[4].setAttribute('onclick', `event.stopPropagation(); resumeFromJob('${escapeHtml(evt.session_id)}', '')`);
+            }
+          }
         }
         break;
       case 'error':
@@ -1323,7 +1468,6 @@ function refreshAll() {
 
 // ── Initialize ──
 async function autoConnect() {
-  const connFab = document.getElementById('connFab');
   const isSameOrigin = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 
   if (isSameOrigin) {
@@ -1342,16 +1486,6 @@ async function autoConnect() {
       _backendConnected = false;
     }
   }
-
-  if (connFab) {
-    if (_backendConnected) {
-      connFab.classList.add('connected');
-      connFab.title = t('msg_connected');
-    } else {
-      connFab.classList.remove('connected');
-      connFab.title = t('msg_disconnected');
-    }
-  }
 }
 
 async function init() {
@@ -1364,11 +1498,19 @@ async function init() {
   jobPollTimer = setInterval(fetchJobs, 3000);
   setInterval(checkStatus, 10000);
 
-  document.getElementById('promptInput').addEventListener('keydown', function(e) {
+  const promptInput = document.getElementById('promptInput');
+  promptInput.addEventListener('keydown', function(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       document.getElementById('sendForm').dispatchEvent(new Event('submit'));
     }
+  });
+
+  // Prompt mirror sync
+  promptInput.addEventListener('input', updatePromptMirror);
+  promptInput.addEventListener('scroll', function() {
+    const mirror = document.getElementById('promptMirror');
+    if (mirror) mirror.scrollTop = this.scrollTop;
   });
 
   // ── File Drag & Drop ──
@@ -1460,7 +1602,7 @@ const I18N = {
     msg_service_start:'서비스 시작 요청 완료', msg_service_stop:'서비스 중지 요청 완료',
     msg_service_restart:'서비스 재시작 요청 완료', msg_service_failed:'서비스 요청 실패',
     status_running:'실행 중', status_done:'완료', status_failed:'실패', status_pending:'대기 중',
-    no_jobs:'작업이 없습니다', connected_to:'연결됨',
+    no_jobs:'작업이 없습니다', connected_to:'연결됨', no_project:'프로젝트 미지정',
   },
   en: {
     title:'Controller Service', send_task:'Send Task', prompt:'Prompt',
@@ -1497,7 +1639,7 @@ const I18N = {
     msg_service_start:'Service start requested', msg_service_stop:'Service stop requested',
     msg_service_restart:'Service restart requested', msg_service_failed:'Service request failed',
     status_running:'Running', status_done:'Done', status_failed:'Failed', status_pending:'Pending',
-    no_jobs:'No jobs', connected_to:'Connected',
+    no_jobs:'No jobs', connected_to:'Connected', no_project:'No project',
   },
   ja: {
     title:'Controller Service', send_task:'新しいタスク送信', prompt:'プロンプト',
@@ -1534,7 +1676,7 @@ const I18N = {
     msg_service_start:'サービス開始を要求', msg_service_stop:'サービス停止を要求',
     msg_service_restart:'サービス再起動を要求', msg_service_failed:'サービスリクエスト失敗',
     status_running:'実行中', status_done:'完了', status_failed:'失敗', status_pending:'待機中',
-    no_jobs:'ジョブがありません', connected_to:'接続済み',
+    no_jobs:'ジョブがありません', connected_to:'接続済み', no_project:'プロジェクト未指定',
   },
   'zh-CN': {
     title:'Controller Service', send_task:'发送任务', prompt:'提示词',
@@ -1569,7 +1711,7 @@ const I18N = {
     msg_service_start:'服务启动请求已完成', msg_service_stop:'服务停止请求已完成',
     msg_service_restart:'服务重启请求已完成', msg_service_failed:'服务请求失败',
     status_running:'运行中', status_done:'完成', status_failed:'失败', status_pending:'等待中',
-    no_jobs:'没有任务', connected_to:'已连接',
+    no_jobs:'没有任务', connected_to:'已连接', no_project:'未指定项目',
   },
   'zh-TW': {
     title:'Controller Service', send_task:'傳送任務', prompt:'提示詞',
@@ -1604,7 +1746,7 @@ const I18N = {
     msg_service_start:'服務啟動請求已完成', msg_service_stop:'服務停止請求已完成',
     msg_service_restart:'服務重新啟動請求已完成', msg_service_failed:'服務請求失敗',
     status_running:'執行中', status_done:'完成', status_failed:'失敗', status_pending:'等待中',
-    no_jobs:'沒有任務', connected_to:'已連線',
+    no_jobs:'沒有任務', connected_to:'已連線', no_project:'未指定專案',
   },
   es: {
     title:'Controller Service', send_task:'Enviar Tarea', prompt:'Prompt',
@@ -1640,7 +1782,7 @@ const I18N = {
     msg_service_start:'Servicio iniciado', msg_service_stop:'Servicio detenido',
     msg_service_restart:'Servicio reiniciado', msg_service_failed:'Error de servicio',
     status_running:'Ejecutando', status_done:'Completado', status_failed:'Fallido', status_pending:'Pendiente',
-    no_jobs:'Sin tareas', connected_to:'Conectado',
+    no_jobs:'Sin tareas', connected_to:'Conectado', no_project:'Sin proyecto',
   },
   fr: {
     title:'Controller Service', send_task:'Envoyer une Tâche', prompt:'Prompt',
@@ -1676,7 +1818,7 @@ const I18N = {
     msg_service_start:'Démarrage du service', msg_service_stop:'Arrêt du service',
     msg_service_restart:'Redémarrage du service', msg_service_failed:'Échec du service',
     status_running:'En cours', status_done:'Terminé', status_failed:'Échoué', status_pending:'En attente',
-    no_jobs:'Aucune tâche', connected_to:'Connecté',
+    no_jobs:'Aucune tâche', connected_to:'Connecté', no_project:'Aucun projet',
   },
   de: {
     title:'Controller Service', send_task:'Aufgabe senden', prompt:'Prompt',
@@ -1712,7 +1854,7 @@ const I18N = {
     msg_service_start:'Dienststart angefordert', msg_service_stop:'Dienststopp angefordert',
     msg_service_restart:'Dienstneustart angefordert', msg_service_failed:'Dienstanforderung fehlgeschlagen',
     status_running:'Läuft', status_done:'Fertig', status_failed:'Fehlgeschlagen', status_pending:'Wartend',
-    no_jobs:'Keine Aufgaben', connected_to:'Verbunden',
+    no_jobs:'Keine Aufgaben', connected_to:'Verbunden', no_project:'Kein Projekt',
   },
 };
 
@@ -1791,19 +1933,6 @@ async function saveSettings() {
     showToast(t('msg_settings_saved'));
   } catch (e) {
     showToast(t('msg_settings_save_failed') + ': ' + e.message, 'error');
-  }
-}
-
-// ── 연결 재시도 (FAB 클릭 시) ──
-async function retryConnect() {
-  showToast('로컬 서버 연결 시도 중...', 'success');
-  await autoConnect();
-  if (_backendConnected) {
-    showToast(t('msg_connected'));
-    checkStatus();
-    fetchJobs();
-  } else {
-    showToast('로컬 서버에 연결할 수 없습니다. 서버가 실행 중인지 확인하세요.', 'error');
   }
 }
 

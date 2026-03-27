@@ -182,7 +182,8 @@ button {
   font-family: var(--font-mono);
   background: var(--blue-dim);
   color: var(--blue);
-  max-width: 260px;
+  min-width: 0;
+  flex: 1 1 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -434,7 +435,7 @@ button {
 
 .main {
   flex: 1;
-  padding: 24px;
+  padding: 24px 0;
   overflow-x: hidden;
   width: 100%;
 }
@@ -751,7 +752,9 @@ button {
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-left: none;
+  border-right: none;
+  border-radius: 0;
   overflow: hidden;
 }
 
@@ -770,6 +773,8 @@ button {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+  flex: 1;
 }
 
 .card-title svg { width: 16px; height: 16px; color: var(--accent); }
@@ -809,6 +814,43 @@ textarea:focus, input[type="text"]:focus {
 }
 
 textarea { min-height: 100px; position: relative; }
+
+/* ── Prompt Mirror Overlay (chip rendering) ── */
+#promptInput {
+  color: transparent;
+  caret-color: var(--text);
+}
+
+#promptInput::selection {
+  background: rgba(108, 140, 255, 0.3);
+  color: transparent;
+}
+
+.prompt-mirror {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 11px 15px;
+  padding-right: 44px;
+  font-family: var(--font);
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.prompt-mirror .prompt-img-chip {
+  pointer-events: none;
+  padding: 1px 6px;
+  font-size: 0.78rem;
+  vertical-align: baseline;
+  line-height: 1.4;
+}
 
 /* ── Image Attachments ── */
 .prompt-wrapper {
@@ -1036,6 +1078,7 @@ table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.82rem;
+  table-layout: fixed;
 }
 
 th {
@@ -1102,7 +1145,6 @@ thead tr { cursor: default; }
 }
 
 .prompt-cell {
-  max-width: 600px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1127,11 +1169,17 @@ thead tr { cursor: default; }
 .job-session {
   font-family: var(--font-mono);
   font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.job-session.clickable {
   color: var(--accent);
   cursor: pointer;
+  border-radius: 3px;
+  transition: background var(--transition);
 }
-.job-session:hover {
+.job-session.clickable:hover {
   text-decoration: underline;
+  background: var(--accent-glow);
 }
 
 .job-time {
@@ -1195,7 +1243,7 @@ thead tr { cursor: default; }
   display: inline-block;
   width: 12px;
   height: 12px;
-  border: 2px solid var(--border-light);
+  border: 2px solid rgba(96, 165, 250, 0.25);
   border-top-color: var(--blue);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -1553,15 +1601,36 @@ thead tr { cursor: default; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ── Responsive ── */
+/* ── @image Chip in prompt cell ── */
+.prompt-img-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: var(--blue-dim);
+  color: var(--blue);
+  font-size: 0.7rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+
+.prompt-img-chip svg {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+}
+
 @media (max-width: 900px) {
-  .main { padding: 16px; }
+  .main { padding: 16px 0; }
 }
 
 @media (max-width: 600px) {
-  .main { padding: 12px; }
+  .main { padding: 12px 0; }
   .card-body { padding: 14px; }
   th, td { padding: 8px 10px; }
-  .prompt-cell { max-width: 140px; }
   .job-cwd { max-width: 120px; }
   .stream-content { max-height: 300px; }
 }
@@ -1761,8 +1830,57 @@ thead tr { cursor: default; }
   padding: 8px 12px;
 }
 
-#connFab.connected {
-  background: var(--green-dim);
-  border-color: var(--green);
-  color: var(--green);
+/* ── Running Job Preview Row ── */
+.preview-row {
+  background: transparent !important;
+  border: none !important;
+}
+.preview-row:hover {
+  background: transparent !important;
+}
+.preview-row td {
+  padding: 0 12px 8px !important;
+  border: none !important;
+}
+
+.job-preview {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #000000;
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 var(--radius) var(--radius);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  line-height: 1.5;
+  margin-top: -4px;
+}
+.job-preview .stream-spinner {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.preview-lines {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+.preview-line {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.preview-tool {
+  display: inline-block;
+  background: var(--blue-dim);
+  color: var(--blue);
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 0.7rem;
+  margin-right: 4px;
+}
+.preview-text {
+  color: var(--text-muted);
 }

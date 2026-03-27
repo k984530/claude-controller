@@ -56,6 +56,10 @@ AUTH_REQUIRED = os.environ.get("AUTH_REQUIRED", "false").lower() == "true"
 AUTH_EXEMPT_PREFIXES = ("/static/", "/uploads/", "/api/auth/")
 AUTH_EXEMPT_PATHS = {"/", "/index.html", "/styles.css", "/app.js"}
 
+# 앱 실행 시 브라우저에서 열 공개 URL
+# 환경변수 PUBLIC_URL로 오버라이드 가능
+PUBLIC_URL = os.environ.get("PUBLIC_URL", "https://claude.won-space.com")
+
 # SSL 인증서 경로 (mkcert 생성 파일)
 SSL_CERT = os.environ.get("SSL_CERT", str(CONTROLLER_DIR / "certs" / "localhost+1.pem"))
 SSL_KEY = os.environ.get("SSL_KEY", str(CONTROLLER_DIR / "certs" / "localhost+1-key.pem"))

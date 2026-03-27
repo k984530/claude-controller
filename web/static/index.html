@@ -61,6 +61,7 @@
               <label class="form-label"><span data-i18n="prompt">프롬프트</span> <span class="img-count-badge" id="imgCountBadge"></span></label>
               <div class="prompt-wrapper" id="promptWrapper">
                 <textarea id="promptInput" data-i18n-placeholder="prompt_placeholder" placeholder="Claude에게 전달할 명령을 입력하세요... (파일/이미지 드래그 또는 붙여넣기 가능)" rows="4"></textarea>
+                <div class="prompt-mirror" id="promptMirror"></div>
                 <div class="drop-overlay" id="dropOverlay">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
                   <span data-i18n="drop_files">파일을 여기에 놓으세요</span>
@@ -138,18 +139,17 @@
           <table>
             <thead>
               <tr>
-                <th>ID</th>
-                <th data-i18n="status">상태</th>
+                <th style="width:52px;">ID</th>
+                <th style="width:72px;" data-i18n="status">상태</th>
                 <th data-i18n="prompt">프롬프트</th>
-                <th data-i18n="folder">폴더</th>
-                <th>Session</th>
-                <th data-i18n="created_at">생성 시간</th>
-                <th style="width:80px;"></th>
+                <th style="width:100px;" data-i18n="folder">폴더</th>
+                <th style="width:80px;">Session</th>
+                <th style="width:130px;" data-i18n="created_at">생성 시간</th>
+                <th style="width:100px;"></th>
               </tr>
             </thead>
             <tbody id="jobTableBody">
               <tr data-job-id="__loading__"><td colspan="7" class="empty-state">
-                <div class="spinner" style="margin: 0 auto 12px;"></div>
                 <div data-i18n="loading_jobs">작업 목록을 불러오는 중...</div>
               </td></tr>
             </tbody>
@@ -160,11 +160,6 @@
 
   </main>
 </div>
-
-<!-- Connection Status FAB (클릭 시 재연결 시도) -->
-<button class="settings-fab" style="bottom: 92px;" onclick="retryConnect()" title="로컬 서버 연결 상태" id="connFab">
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-</button>
 
 <!-- Settings FAB -->
 <button class="settings-fab" onclick="openSettings()" title="설정">

@@ -51,7 +51,7 @@ def main():
     # 웹 모듈 임포트
     sys.path.insert(0, str(CONTROLLER_DIR / "web"))
     from server import ControllerHandler
-    from config import SSL_CERT, SSL_KEY
+    from config import SSL_CERT, SSL_KEY, PUBLIC_URL
     from auth import generate_token
 
     # 토큰 생성 (매 시작 시 새로 발급)
@@ -73,7 +73,8 @@ def main():
   ┌──────────────────────────────────────────────┐
   │  Claude Controller                           │
   ├──────────────────────────────────────────────┤
-  │  URL   : {scheme}://localhost:{PORT:<24s}│
+  │  API   : {scheme}://localhost:{PORT:<24s}│
+  │  App   : {PUBLIC_URL:<35s}│
   │  SSL   : {'ON' if use_ssl else 'OFF (HTTP 모드)':<35s}│
   ├──────────────────────────────────────────────┤
   │  Auth Token (아래 토큰을 프론트엔드에 입력):  │
@@ -88,7 +89,7 @@ def main():
         print(f"    mkcert -install && mkcert -cert-file certs/localhost+1.pem \\")
         print(f"      -key-file certs/localhost+1-key.pem localhost 127.0.0.1\n")
 
-    webbrowser.open(f"{scheme}://localhost:{PORT}")
+    webbrowser.open(PUBLIC_URL)
 
     try:
         server.serve_forever()
