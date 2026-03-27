@@ -9,5 +9,11 @@
 #   echo "프롬프트" | claude-sh   파이프라인 입력
 # ============================================================
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+_src="${BASH_SOURCE[0]}"
+while [[ -L "$_src" ]]; do
+  _dir="$(cd "$(dirname "$_src")" && pwd)"
+  _src="$(readlink "$_src")"
+  [[ "$_src" != /* ]] && _src="$_dir/$_src"
+done
+SCRIPT_DIR="$(cd "$(dirname "$_src")/.." && pwd)"
 exec bash "${SCRIPT_DIR}/claude-shell.sh" "$@"

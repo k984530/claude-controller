@@ -3,8 +3,11 @@
 # Controller Service — Configuration
 # ============================================================
 
-# Claude CLI 경로 (앱에서 실행 시 PATH가 제한적이므로 절대 경로 지정)
-CLAUDE_BIN="${CLAUDE_BIN:-/Applications/cmux.app/Contents/Resources/bin/claude}"
+# Claude CLI 경로
+# 1) 환경변수 CLAUDE_BIN이 있으면 사용
+# 2) PATH에서 claude를 찾음
+# 3) macOS 앱 기본 경로
+CLAUDE_BIN="${CLAUDE_BIN:-$(command -v claude 2>/dev/null || echo "/Applications/cmux.app/Contents/Resources/bin/claude")}"
 
 # 기본 출력 형식 (stream-json: 실시간 토큰 스트리밍)
 DEFAULT_OUTPUT_FORMAT="${DEFAULT_OUTPUT_FORMAT:-stream-json}"

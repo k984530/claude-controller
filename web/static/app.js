@@ -106,11 +106,11 @@ function _updateContextUI() {
   if (_contextSessionId) {
     const tag = _contextMode === 'resume' ? 'resume' : 'fork';
     const shortId = _contextSessionId.slice(0, 8);
-    const p = _contextSessionPrompt ? ' \u00b7 ' + _contextSessionPrompt.slice(0, 30) : '';
+    const p = _contextSessionPrompt ? ' \u00b7 ' + _contextSessionPrompt : '';
     label.textContent = tag + ' \u00b7 ' + shortId + p;
-    label.style.display = 'inline-flex';
+    label.classList.add('visible');
   } else {
-    label.style.display = 'none';
+    label.classList.remove('visible');
   }
 }
 
@@ -410,19 +410,36 @@ function updatePromptMirror() {
   const mirror = document.getElementById('promptMirror');
   if (!ta || !mirror) return;
   const val = ta.value;
-  if (!val) { mirror.innerHTML = ''; return; }
+  if (!val) {
+    mirror.innerHTML = '';
+    syncAttachmentsFromText('');
+    return;
+  }
   const escaped = escapeHtml(val);
-  const chipIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>';
-  mirror.innerHTML = escaped.replace(/@(\/[^\s,]+|image(\d+))/g, (match, ref, idx) => {
-    if (idx !== undefined) {
-      const att = attachments[parseInt(idx)];
-      const label = att ? (att.filename || match) : match;
-      return `<span class="prompt-img-chip" title="${escapeHtml(match)}">${chipIcon}${escapeHtml(label)}</span>`;
-    }
-    const label = ref.split('/').pop();
-    return `<span class="prompt-img-chip" title="${escapeHtml(match)}">${chipIcon}${escapeHtml(label)}</span>`;
+  // Color-only highlight: keep exact text, just wrap @refs in a colored span
+  mirror.innerHTML = escaped.replace(/@(\/[^\s,]+|image\d+)/g, (match) => {
+    return `<span class="prompt-at-ref">${escapeHtml(match)}</span>`;
   }) + '\n';
   mirror.scrollTop = ta.scrollTop;
+  syncAttachmentsFromText(val);
+}
+
+// @imageN 참조가 textarea에서 사라지면 해당 첨부를 자동 제거
+function syncAttachmentsFromText(text) {
+  const container = document.getElementById('attachmentPreviews');
+  if (!container) return;
+  let changed = false;
+  attachments.forEach((att, idx) => {
+    if (!att) return;
+    const ref = `@image${idx}`;
+    if (!text.includes(ref)) {
+      attachments[idx] = null;
+      const thumb = container.querySelector(`[data-idx="${idx}"]`);
+      if (thumb) thumb.remove();
+      changed = true;
+    }
+  });
+  if (changed) updateAttachBadge();
 }
 
 function formatFileSize(bytes) {
@@ -654,6 +671,36 @@ function focusFollowUpInput(jobId) {
   }
 }
 
+// followup 첨부 상태 (jobId -> [{serverPath, filename}])
+const followUpAttachments = {};
+
+async function handleFollowUpFiles(jobId, files) {
+  if (!followUpAttachments[jobId]) followUpAttachments[jobId] = [];
+  const container = document.getElementById(`followupPreviews-${jobId}`);
+  for (const file of files) {
+    try {
+      const data = await uploadFile(file);
+      followUpAttachments[jobId].push({ serverPath: data.path, filename: data.filename || file.name });
+      if (container) {
+        const chip = document.createElement('span');
+        chip.className = 'followup-file-chip';
+        chip.textContent = data.filename || file.name;
+        chip.title = data.path;
+        container.appendChild(chip);
+      }
+      // input에 @path 삽입
+      const input = document.getElementById(`followupInput-${jobId}`);
+      if (input) {
+        const space = input.value.length > 0 && !input.value.endsWith(' ') ? ' ' : '';
+        input.value += space + '@' + data.path + ' ';
+        input.focus();
+      }
+    } catch (err) {
+      showToast(`${t('msg_upload_failed')}: ${file.name}`, 'error');
+    }
+  }
+}
+
 async function sendFollowUp(jobId) {
   if (_sendLock) return;
 
@@ -675,18 +722,25 @@ async function sendFollowUp(jobId) {
   }
 
   _sendLock = true;
-  const btn = input.nextElementSibling;
+  const btn = input.parentElement.querySelector('.btn-primary');
   const origHtml = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner" style="width:12px;height:12px;"></span>';
 
   try {
+    // followup 첨부 이미지 경로를 images 배열로 전송
+    const images = (followUpAttachments[jobId] || []).map(a => a.serverPath);
     const body = { prompt, session: `resume:${sessionId}` };
     if (cwd) body.cwd = cwd;
+    if (images.length > 0) body.images = images;
 
     await apiFetch('/api/send', { method: 'POST', body: JSON.stringify(body) });
     showToast(t('msg_continue_sent'));
     input.value = '';
+    // 첨부 초기화
+    delete followUpAttachments[jobId];
+    const container = document.getElementById(`followupPreviews-${jobId}`);
+    if (container) container.innerHTML = '';
     fetchJobs();
   } catch (err) {
     showToast(`${t('msg_send_failed')}: ${err.message}`, 'error');
@@ -1143,14 +1197,34 @@ function renderStreamDone(jobId) {
       <span class="stream-followup-label">이어서</span>
       <div class="followup-input-wrap">
         <input type="text" class="followup-input" id="followupInput-${escapeHtml(jobId)}"
-               placeholder="이 세션에 이어서 실행할 명령..."
+               placeholder="이 세션에 이어서 실행할 명령... (파일/이미지 붙여넣기 가능)"
                onkeydown="if(event.key==='Enter'){event.stopPropagation();sendFollowUp('${escapeHtml(jobId)}')}"
                onclick="event.stopPropagation()">
         <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); sendFollowUp('${escapeHtml(jobId)}')" style="white-space:nowrap;">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> 전송
         </button>
-      </div>`;
+      </div>
+      <div class="followup-previews" id="followupPreviews-${escapeHtml(jobId)}"></div>`;
     panel.appendChild(followup);
+
+    // followup input에 paste/drop 이벤트 바인딩
+    const fInput = document.getElementById(`followupInput-${jobId}`);
+    if (fInput) {
+      fInput.addEventListener('paste', function(e) {
+        const files = e.clipboardData?.files;
+        if (files && files.length > 0) {
+          e.preventDefault();
+          handleFollowUpFiles(jobId, files);
+        }
+      });
+      fInput.addEventListener('drop', function(e) {
+        if (e.dataTransfer.files.length > 0) {
+          e.preventDefault();
+          handleFollowUpFiles(jobId, e.dataTransfer.files);
+        }
+      });
+      fInput.addEventListener('dragover', function(e) { e.preventDefault(); });
+    }
   }
 }
 
@@ -1502,21 +1576,22 @@ async function init() {
     if (mirror) mirror.scrollTop = this.scrollTop;
   });
 
-  // ── File Drag & Drop ──
+  // ── File Drag & Drop (card 전체 영역) ──
   const wrapper = document.getElementById('promptWrapper');
+  const dropZone = document.getElementById('sendTask');
   let dragCounter = 0;
 
-  wrapper.addEventListener('dragenter', function(e) {
+  dropZone.addEventListener('dragenter', function(e) {
     e.preventDefault();
     dragCounter++;
     wrapper.classList.add('drag-over');
   });
 
-  wrapper.addEventListener('dragover', function(e) {
+  dropZone.addEventListener('dragover', function(e) {
     e.preventDefault();
   });
 
-  wrapper.addEventListener('dragleave', function(e) {
+  dropZone.addEventListener('dragleave', function(e) {
     e.preventDefault();
     dragCounter--;
     if (dragCounter <= 0) {
@@ -1525,11 +1600,21 @@ async function init() {
     }
   });
 
-  wrapper.addEventListener('drop', function(e) {
+  dropZone.addEventListener('drop', function(e) {
     e.preventDefault();
     dragCounter = 0;
     wrapper.classList.remove('drag-over');
     if (e.dataTransfer.files.length > 0) {
+      handleFiles(e.dataTransfer.files);
+    }
+  });
+
+  // ── 페이지 전체 기본 drop 방지 (파일을 새 탭에 여는 것 방지) ──
+  document.addEventListener('dragover', function(e) { e.preventDefault(); });
+  document.addEventListener('drop', function(e) {
+    // sendTask 영역 밖에 드롭해도 파일 첨부로 처리
+    if (e.dataTransfer.files.length > 0) {
+      e.preventDefault();
       handleFiles(e.dataTransfer.files);
     }
   });

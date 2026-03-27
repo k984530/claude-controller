@@ -1,0 +1,37 @@
+# Runtime data (generated at runtime)
+logs/
+sessions/
+data/
+queue/
+worktrees/
+uploads/
+certs/
+
+# Service PID
+service/*.pid
+
+# Python bytecode
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Vercel
+.vercel/
+web/static/vercel.json
+
+# Editor
+*.swp
+*.swo
+*~
+
+# Dev files
+REVIEW.md

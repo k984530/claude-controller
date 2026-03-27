@@ -23,9 +23,9 @@
           <div class="card-title">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
             <span data-i18n="send_task">새 작업 전송</span>
-            <span class="ctx-session-label" id="ctxSessionLabel" style="display:none;"></span>
+            <span class="ctx-session-label" id="ctxSessionLabel"></span>
           </div>
-          <div style="position:relative;">
+          <div class="ctx-toolbar-wrap">
             <div class="ctx-toolbar">
               <button type="button" class="ctx-btn-x" onclick="clearContext()" title="컨텍스트 초기화">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -60,7 +60,7 @@
             <div class="form-group">
               <label class="form-label"><span data-i18n="prompt">프롬프트</span> <span class="img-count-badge" id="imgCountBadge"></span></label>
               <div class="prompt-wrapper" id="promptWrapper">
-                <textarea id="promptInput" data-i18n-placeholder="prompt_placeholder" placeholder="Claude에게 전달할 명령을 입력하세요... (파일/이미지 드래그 또는 붙여넣기 가능)" rows="4"></textarea>
+                <textarea id="promptInput" data-i18n-placeholder="prompt_placeholder" placeholder="Claude에게 전달할 명령을 입력하세요... (파일/이미지 드래그 또는 붙여넣기 가능)" rows="2"></textarea>
                 <div class="prompt-mirror" id="promptMirror"></div>
                 <div class="drop-overlay" id="dropOverlay">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
@@ -125,7 +125,7 @@
             <span data-i18n="job_list">작업 목록</span>
             <span id="jobCount" style="font-size:0.72rem; color:var(--text-muted); font-weight:400;"></span>
           </div>
-          <div style="display:flex; align-items:center; gap:8px;">
+          <div class="card-header-actions">
             <button class="btn btn-sm btn-danger" id="btnDeleteCompleted" onclick="deleteCompletedJobs()" title="완료된 작업 모두 제거" style="display:none;">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
               <span data-i18n="delete_completed">완료 삭제</span>
@@ -139,13 +139,13 @@
           <table>
             <thead>
               <tr>
-                <th style="width:52px;">ID</th>
-                <th style="width:72px;" data-i18n="status">상태</th>
+                <th style="width:5%;">ID</th>
+                <th style="width:8%;" data-i18n="status">상태</th>
                 <th data-i18n="prompt">프롬프트</th>
-                <th style="width:100px;" data-i18n="folder">폴더</th>
-                <th style="width:80px;">Session</th>
-                <th style="width:130px;" data-i18n="created_at">생성 시간</th>
-                <th style="width:100px;"></th>
+                <th style="width:12%;" data-i18n="folder">폴더</th>
+                <th style="width:9%;">Session</th>
+                <th style="width:14%;" data-i18n="created_at">생성 시간</th>
+                <th style="width:10%;"></th>
               </tr>
             </thead>
             <tbody id="jobTableBody">

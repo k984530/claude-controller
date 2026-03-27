@@ -1,0 +1,61 @@
+{
+  "name": "claude-controller",
+  "version": "0.1.0",
+  "description": "Claude Code headless daemon controller — FIFO-based async task dispatch, Git Worktree isolation, auto-checkpointing, and a web dashboard",
+  "license": "MIT",
+  "author": "choiwon",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "headless",
+    "controller",
+    "orchestration",
+    "daemon",
+    "worktree",
+    "checkpoint"
+  ],
+  "bin": {
+    "claude-controller": "./bin/controller",
+    "claude-send": "./bin/send",
+    "claude-start": "./bin/start",
+    "claude-sh": "./bin/claude-sh"
+  },
+  "files": [
+    "bin/controller",
+    "bin/send",
+    "bin/start",
+    "bin/claude-sh",
+    "bin/app-launcher.sh",
+    "bin/native-app.py",
+    "lib/",
+    "service/controller.sh",
+    "web/*.py",
+    "web/static/index.html",
+    "web/static/app.js",
+    "web/static/styles.css",
+    "config.sh",
+    "README.md",
+    "LICENSE",
+    "postinstall.sh"
+  ],
+  "scripts": {
+    "postinstall": "bash postinstall.sh",
+    "start": "bash bin/start",
+    "server": "python3 bin/native-app.py",
+    "service:start": "bash bin/controller start",
+    "service:stop": "bash bin/controller stop",
+    "service:status": "bash bin/controller status",
+    "send": "bash bin/send"
+  },
+  "os": [
+    "darwin",
+    "linux"
+  ],
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": ""
+  }
+}
