@@ -1,6 +1,6 @@
 {
   "name": "claude-controller",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Claude Code headless daemon controller — FIFO-based async task dispatch, Git Worktree isolation, auto-checkpointing, and a web dashboard",
   "license": "MIT",
   "author": "choiwon",
@@ -18,7 +18,8 @@
     "claude-controller": "./bin/controller",
     "claude-send": "./bin/send",
     "claude-start": "./bin/start",
-    "claude-sh": "./bin/claude-sh"
+    "claude-sh": "./bin/claude-sh",
+    "claude-ctl": "./bin/ctl"
   },
   "files": [
     "bin/controller",
@@ -26,13 +27,14 @@
     "bin/start",
     "bin/claude-sh",
     "bin/app-launcher.sh",
+    "bin/ctl",
     "bin/native-app.py",
     "lib/",
     "service/controller.sh",
     "web/*.py",
-    "web/static/index.html",
-    "web/static/app.js",
-    "web/static/styles.css",
+    "web/static/*.html",
+    "web/static/*.js",
+    "web/static/*.css",
     "config.sh",
     "README.md",
     "LICENSE",

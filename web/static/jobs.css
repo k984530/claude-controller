@@ -1,0 +1,580 @@
+/* ── Jobs & Stream ── */
+
+/* ── Job Table ── */
+.table-wrap { overflow-x: hidden; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  table-layout: fixed;
+}
+
+th {
+  text-align: left;
+  padding: 10px 14px;
+  font-weight: 600;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  vertical-align: top;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+tr:hover td { background: var(--surface-hover); }
+tr { cursor: pointer; transition: background var(--transition); }
+thead tr { cursor: default; }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge-running {
+  background: var(--blue-dim);
+  color: var(--blue);
+}
+
+.badge-running::before {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--blue);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.badge-done {
+  background: var(--green-dim);
+  color: var(--green);
+}
+
+.badge-failed {
+  background: var(--red-dim);
+  color: var(--red);
+}
+
+.badge-pending {
+  background: var(--yellow-dim);
+  color: var(--yellow);
+}
+
+.job-id {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--accent);
+}
+
+.job-cwd {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.job-session {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.job-session.clickable {
+  color: var(--accent);
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background var(--transition);
+}
+.job-session.clickable:hover {
+  text-decoration: underline;
+  background: var(--accent-glow);
+}
+
+.job-time {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.expand-row td {
+  padding: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.expand-content {
+  padding: 14px 18px;
+  background: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 300px;
+  overflow-y: auto;
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; max-height: 0; }
+  to { opacity: 1; max-height: 300px; }
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.empty-state svg {
+  width: 40px;
+  height: 40px;
+  margin-bottom: 12px;
+  opacity: 0.3;
+}
+
+/* ── Stream Panel ── */
+.stream-panel {
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  animation: streamSlideDown 0.25s ease;
+}
+
+@keyframes streamSlideDown {
+  from { opacity: 0; max-height: 0; }
+  to { opacity: 1; max-height: 600px; }
+}
+
+
+.stream-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(96, 165, 250, 0.25);
+  border-top-color: var(--blue);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.stream-pulse {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  color: var(--blue);
+  font-weight: 500;
+}
+
+.stream-pulse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--blue);
+  animation: streamPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes streamPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.3; transform: scale(0.7); }
+}
+
+.stream-content {
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 14px 18px;
+  background: #080a0e;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.7;
+  scroll-behavior: smooth;
+}
+
+.stream-content::-webkit-scrollbar-thumb { background: var(--border-light); }
+
+.stream-event {
+  padding: 3px 0;
+  word-break: break-word;
+}
+
+.stream-event + .stream-event {
+  margin-top: 2px;
+}
+
+.stream-event-text {
+  color: #e4e6ed;
+  white-space: pre-wrap;
+}
+
+.stream-event-tool {
+  color: var(--yellow);
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.stream-tool-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--yellow-dim);
+  color: var(--yellow);
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.stream-tool-badge::before {
+  content: '>';
+  opacity: 0.5;
+}
+
+.stream-tool-input {
+  color: #d4d4d4;
+  white-space: pre-wrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.stream-event-result {
+  color: var(--green);
+  padding: 6px 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.stream-result-icon {
+  color: var(--green);
+  flex-shrink: 0;
+  font-weight: 700;
+}
+
+.stream-result-text {
+  white-space: pre-wrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.stream-event-error {
+  color: var(--red);
+  padding: 4px 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.stream-error-icon {
+  color: var(--red);
+  flex-shrink: 0;
+  font-weight: 700;
+}
+
+.stream-error-text {
+  white-space: pre-wrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.stream-empty {
+  color: var(--text-muted);
+  text-align: center;
+  padding: 24px;
+  font-size: 0.8rem;
+}
+
+.stream-done-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 18px;
+  background: var(--green-dim);
+  color: var(--green);
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-top: 1px solid rgba(52, 211, 153, 0.2);
+}
+
+.stream-done-banner.failed {
+  background: var(--red-dim);
+  color: var(--red);
+  border-top-color: rgba(248, 113, 113, 0.2);
+}
+
+/* ── Stream Action Buttons ── */
+.stream-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.stream-actions .btn svg { flex-shrink: 0; }
+
+/* ── Delete Button in Job Row ── */
+.btn-delete-job {
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  font-size: 0.72rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all var(--transition);
+}
+
+.btn-delete-job:hover {
+  background: var(--red-dim);
+  color: var(--red);
+  border-color: var(--red);
+}
+
+/* ── Retry Job Button in Job Row ── */
+.btn-retry-job {
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  font-size: 0.72rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all var(--transition);
+}
+
+.btn-retry-job:hover {
+  background: var(--yellow-dim);
+  color: var(--yellow);
+  border-color: var(--yellow);
+}
+
+/* ── Continue Session Button in Job Row ── */
+.btn-continue-job {
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  font-size: 0.72rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all var(--transition);
+}
+
+.btn-continue-job:hover {
+  background: var(--accent-glow);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* ── Fork Session Button in Job Row ── */
+.btn-fork-job {
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  font-size: 0.72rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all var(--transition);
+}
+
+.btn-fork-job:hover {
+  background: var(--yellow-dim);
+  color: var(--yellow);
+  border-color: var(--yellow);
+}
+
+/* ── Follow-up Input in Stream Panel ── */
+.stream-followup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.stream-followup-label {
+  font-size: 0.7rem;
+  color: var(--accent);
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.followup-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+
+.followup-input {
+  flex: 1;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.78rem;
+  font-family: var(--font-mono);
+  outline: none;
+  transition: border-color var(--transition);
+}
+
+.followup-input:focus {
+  border-color: var(--accent);
+}
+
+.followup-input::placeholder {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.followup-previews {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 18px;
+}
+
+.followup-previews:empty { display: none; }
+
+.followup-file-chip {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.68rem;
+  font-family: var(--font-mono);
+  background: var(--green-dim);
+  color: var(--green);
+  white-space: nowrap;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Copy Success Animation ── */
+.btn-copied {
+  color: var(--green) !important;
+  border-color: var(--green) !important;
+  background: var(--green-dim) !important;
+}
+
+/* ── Toast ── */
+.toast-container {
+  position: fixed;
+  top: 70px;
+  right: 24px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toast {
+  padding: 10px 16px;
+  border-radius: var(--radius);
+  font-size: 0.82rem;
+  font-weight: 500;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  animation: toastIn 0.3s ease, toastOut 0.3s ease 2.7s forwards;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toast.success { border-color: var(--green); color: var(--green); }
+.toast.error { border-color: var(--red); color: var(--red); }
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes toastOut {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(20px); }
+}
+
+/* ── Spinner ── */
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Responsive ── */
+/* ── @image Chip in prompt cell ── */
+.prompt-img-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: var(--blue-dim);
+  color: var(--blue);
+  font-size: 0.7rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+
+.prompt-img-chip svg {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 900px) {
+  th, td { padding: 10px 10px; font-size: 0.78rem; }
+}
+
+@media (max-width: 600px) {
+  .main { padding: 4px 0; }
+  .card-body { padding: 14px; }
+  th, td { padding: 8px 6px; font-size: 0.74rem; }
+  .stream-content { max-height: 300px; }
+}

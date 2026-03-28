@@ -6,7 +6,11 @@
 <title data-i18n="title">Controller Service</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="base.css">
+<link rel="stylesheet" href="form.css">
+<link rel="stylesheet" href="jobs.css">
+<link rel="stylesheet" href="settings-style.css">
+<link rel="stylesheet" href="pipeline.css">
 </head>
 <body>
 
@@ -58,7 +62,11 @@
             <div class="recent-dirs" id="recentDirs"></div>
 
             <div class="form-group">
-              <label class="form-label"><span data-i18n="prompt">프롬프트</span> <span class="img-count-badge" id="imgCountBadge"></span></label>
+              <label class="form-label" style="display:flex;align-items:center;gap:6px;">
+                <span data-i18n="prompt">프롬프트</span>
+                <span class="img-count-badge" id="imgCountBadge"></span>
+                <span id="promptSessionInfo" style="margin-left:auto;font-size:0.68rem;font-weight:400;color:var(--text-muted);font-family:var(--font-mono,monospace);"></span>
+              </label>
               <div class="prompt-wrapper" id="promptWrapper">
                 <textarea id="promptInput" data-i18n-placeholder="prompt_placeholder" placeholder="Claude에게 전달할 명령을 입력하세요... (파일/이미지 드래그 또는 붙여넣기 가능)" rows="2"></textarea>
                 <div class="prompt-mirror" id="promptMirror"></div>
@@ -91,8 +99,20 @@
               <div class="dir-browser-panel" id="dirBrowserPanel">
                 <div class="dir-modal-header">
                   <span class="dir-modal-title" data-i18n="browse_directory">디렉토리 탐색</span>
-                  <button type="button" class="dir-modal-close" onclick="closeDirBrowser()">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  <div style="display:flex;align-items:center;gap:4px;">
+                    <button type="button" class="dir-modal-close" onclick="showCreateDirInput()" title="새 폴더 만들기">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+                    </button>
+                    <button type="button" class="dir-modal-close" onclick="closeDirBrowser()">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  </div>
+                </div>
+                <div class="dir-create-row" id="dirCreateRow" style="display:none;">
+                  <input type="text" id="dirCreateInput" class="dir-create-input" placeholder="새 폴더 이름" onkeydown="if(event.key==='Enter')createDir();if(event.key==='Escape')hideCreateDirInput();">
+                  <button type="button" class="btn btn-sm btn-primary" onclick="createDir()" data-i18n="create">생성</button>
+                  <button type="button" class="btn btn-sm" onclick="hideCreateDirInput()">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                   </button>
                 </div>
                 <div class="dir-modal-path" id="dirBreadcrumb"></div>
@@ -105,11 +125,23 @@
             </div>
 
             <div class="form-actions">
-              <button type="button" class="btn" onclick="clearPromptForm();" data-i18n="reset">초기화</button>
-              <button type="submit" class="btn btn-primary" id="btnSend">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                <span data-i18n="send">전송</span>
-              </button>
+              <div class="automation-inline" id="automationRow" style="display:none;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span class="automation-inline-label">반복 간격</span>
+                <input type="text" class="setting-input" id="automationInterval" placeholder="5m" style="width:60px;padding:3px 8px;font-size:0.72rem;">
+                <span class="automation-inline-hint">예: 30s, 5m, 1h</span>
+              </div>
+              <div class="form-actions-buttons">
+                <button type="button" class="btn" onclick="clearPromptForm();" data-i18n="reset">초기화</button>
+                <button type="button" class="btn" id="btnAutoToggle" onclick="toggleAutomation()" title="자동화 모드 전환" style="display:flex;align-items:center;gap:4px;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  <span>자동화</span>
+                </button>
+                <button type="submit" class="btn btn-primary" id="btnSend">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                  <span data-i18n="send">전송</span>
+                </button>
+              </div>
             </div>
           </form>
         </div>
@@ -133,9 +165,12 @@
             <button class="btn btn-sm btn-icon" onclick="fetchJobs()" title="새로고침">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
             </button>
+            <button class="btn btn-sm btn-icon btn-collapse" id="btnCollapseJobs" onclick="toggleJobListCollapse()" title="최소화">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
           </div>
         </div>
-        <div class="table-wrap">
+        <div class="table-wrap" id="jobTableWrap">
           <table>
             <thead>
               <tr>
@@ -158,8 +193,33 @@
       </div>
     </div>
 
+    <!-- Section 3: Automations -->
+    <div class="section" id="pipelineSection">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span>자동화</span>
+            <span id="pipelineCount" style="font-size:0.72rem; color:var(--text-muted); font-weight:400;"></span>
+          </div>
+          <div class="card-header-actions">
+            <button class="btn btn-sm btn-icon" onclick="fetchPipelines()" title="새로고침">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            </button>
+          </div>
+        </div>
+        <div id="pipelineList" class="pipeline-list">
+          <div class="empty-state" style="padding:20px; text-align:center; color:var(--text-muted); font-size:0.8rem;">
+            자동화가 없습니다. 위 입력창에서 자동화 버튼을 눌러 등록하세요.
+          </div>
+        </div>
+      </div>
+    </div>
+
   </main>
 </div>
+
+<!-- Pipeline modal removed — 자동화 등록은 입력창에서 직접 수행 -->
 
 <!-- Settings FAB -->
 <button class="settings-fab" onclick="openSettings()" title="설정">
@@ -211,9 +271,15 @@
   </div>
 </div>
 
+<!-- Project Modal -->
+
 <!-- Toast Container -->
 <div class="toast-container" id="toastContainer"></div>
 
-<script src="app.js"></script>
+<script>
+// 캐시 버스팅: 순서 보장 로드
+['i18n','utils','api','context','attachments','dirs','send','stream','jobs','pipelines','settings','app']
+.forEach(m => { const s = document.createElement('script'); s.src = m + '.js?t=' + Date.now(); s.async = false; document.body.appendChild(s); });
+</script>
 </body>
 </html>

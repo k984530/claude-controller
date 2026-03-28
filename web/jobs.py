@@ -108,7 +108,15 @@ def get_job_result(job_id):
 
     meta = parse_meta_file(meta_file)
     if meta.get("STATUS") == "running":
-        return {"status": "running", "result": None}, None
+        # 프로세스가 실제로 살아있는지 확인 — meta가 running이지만 PID가 죽었으면 done 처리
+        pid = meta.get("PID")
+        if pid:
+            try:
+                os.kill(int(pid), 0)
+            except (ProcessLookupError, ValueError, OSError):
+                meta["STATUS"] = "done"
+        if meta.get("STATUS") == "running":
+            return {"status": "running", "result": None}, None
 
     if not out_file.exists():
         return None, "출력 파일이 없습니다"

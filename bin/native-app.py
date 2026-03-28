@@ -73,7 +73,7 @@ def main():
   ┌──────────────────────────────────────────────┐
   │  Claude Controller                           │
   ├──────────────────────────────────────────────┤
-  │  API   : {scheme}://localhost:{PORT:<24s}│
+  │  API   : {scheme}://localhost:{PORT:<24}│
   │  App   : {PUBLIC_URL:<35s}│
   │  SSL   : {'ON' if use_ssl else 'OFF (HTTP 모드)':<35s}│
   ├──────────────────────────────────────────────┤
