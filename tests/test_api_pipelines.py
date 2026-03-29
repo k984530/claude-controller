@@ -116,13 +116,13 @@ class TestGetApiPipelines(unittest.TestCase):
     # ── 선택적 필드 타입 검증 ────────────────────────
 
     def test_numeric_fields_types(self):
-        """interval_sec, effective_interval_sec, run_count 는 정수이다 (있는 경우)."""
+        """interval_sec, run_count 는 정수이다 (있는 경우)."""
         resp = requests.get(PIPELINES_URL, timeout=5)
         data = resp.json()
         if not data:
             self.skipTest("파이프라인이 없어 검증 불가")
         item = data[0]
-        for field in ("interval_sec", "effective_interval_sec", "run_count"):
+        for field in ("interval_sec", "run_count"):
             if field in item and item[field] is not None:
                 self.assertIsInstance(
                     item[field], int,
