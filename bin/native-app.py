@@ -61,7 +61,7 @@ def main():
     use_ssl = os.path.isfile(SSL_CERT) and os.path.isfile(SSL_KEY)
     scheme = "https" if use_ssl else "http"
 
-    server = http.server.HTTPServer(("127.0.0.1", PORT), ControllerHandler)
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", PORT), ControllerHandler)
 
     if use_ssl:
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
@@ -89,7 +89,10 @@ def main():
         print(f"    mkcert -install && mkcert -cert-file certs/localhost+1.pem \\")
         print(f"      -key-file certs/localhost+1-key.pem localhost 127.0.0.1\n")
 
-    webbrowser.open(PUBLIC_URL)
+    try:
+        webbrowser.open(PUBLIC_URL)
+    except Exception:
+        pass  # Docker 등 headless 환경에서는 브라우저 없음
 
     try:
         server.serve_forever()

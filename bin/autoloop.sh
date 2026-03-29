@@ -30,8 +30,16 @@ STUCK_THRESHOLD_MIN=30         # 이 시간(분) 이상 running이면 stuck
 DISK_WARN_MB=500               # 디스크 경고 임계값 (MB)
 DISK_CRITICAL_MB=2000          # 디스크 위험 임계값 (MB)
 LOG_MAX_SIZE_MB=10             # service.log 로테이션 임계값
+LOG_RETENTION_DAYS=30          # 완료된 작업 파일 보존 기간 (일)
 MAX_RESTART_ATTEMPTS=3         # 연속 재시작 최대 횟수
 RESTART_STATE_FILE="$CONTROLLER_DIR/data/.restart_count"
+
+# settings.json 오버라이드
+_SETTINGS="$CONTROLLER_DIR/data/settings.json"
+if [[ -f "$_SETTINGS" ]] && command -v jq &>/dev/null; then
+  _v=$(jq -r '.log_retention_days // empty' "$_SETTINGS" 2>/dev/null)
+  [[ -n "$_v" ]] && LOG_RETENTION_DAYS="$_v"
+fi
 
 NOW=$(date '+%Y-%m-%d %H:%M:%S')
 ISSUES=()
@@ -108,14 +116,60 @@ tick_pipelines() {
 
     # 새 단계가 시작되면 알림
     if echo "$result" | grep -q '"action": "dispatched"'; then
-      local phase
-      phase=$(echo "$result" | $PYTHON -c "import sys,json; r=json.load(sys.stdin); print(next((x['result'].get('label','?') for x in r if x.get('result',{}).get('action')=='dispatched'),'?'))" 2>/dev/null || echo "?")
-      osascript -e "display notification \"파이프라인 단계 시작: $phase\" with title \"AutoLoop\"" 2>/dev/null || true
+      local name
+      name=$(echo "$result" | $PYTHON -c "import sys,json; r=json.load(sys.stdin); print(next((x.get('name','?') for x in r if x.get('result',{}).get('action')=='dispatched'),'?'))" 2>/dev/null || echo "?")
+      osascript -e "display notification \"파이프라인 시작: $name\" with title \"AutoLoop\"" 2>/dev/null || true
     fi
 
-    # 파이프라인 완료 알림
-    if echo "$result" | grep -q '"action": "done"'; then
-      osascript -e 'display notification "파이프라인 완료!" with title "AutoLoop" sound name "Glass"' 2>/dev/null || true
+    # 스킵된 파이프라인 로깅
+    if echo "$result" | grep -q '"action": "skipped"'; then
+      local skip_info
+      skip_info=$(echo "$result" | $PYTHON -c "
+import sys,json
+r=json.load(sys.stdin)
+for x in r:
+    res = x.get('result',{})
+    if res.get('action')=='skipped':
+        print(f\"{x.get('name','?')}: {res.get('reason','?')}\")
+" 2>/dev/null || echo "skipped")
+      log "Pipeline skipped (비용 절감): $skip_info"
+    fi
+
+    # 자동 일시정지 알림
+    if echo "$result" | grep -q '"action": "auto_paused"'; then
+      local pause_info
+      pause_info=$(echo "$result" | $PYTHON -c "
+import sys,json
+r=json.load(sys.stdin)
+for x in r:
+    res = x.get('result',{})
+    if res.get('action')=='auto_paused':
+        print(f\"{x.get('name','?')}: {res.get('reason','?')}\")
+" 2>/dev/null || echo "paused")
+      log "Pipeline AUTO-PAUSED: $pause_info"
+      osascript -e "display notification \"$pause_info\" with title \"AutoLoop: 자동 일시정지\" sound name \"Submarine\"" 2>/dev/null || true
+    fi
+
+    # 파이프라인 완료 알림 (분류 결과 포함)
+    if echo "$result" | grep -q '"action": "completed"'; then
+      local completed_info
+      completed_info=$(echo "$result" | $PYTHON -c "
+import sys,json
+r=json.load(sys.stdin)
+for x in r:
+    res = x.get('result',{})
+    if res.get('action')=='completed':
+        cls = res.get('classification','?')
+        name = x.get('name','?')
+        adapt = res.get('interval_adapted')
+        chain = res.get('chain')
+        msg = f'{name}: {cls}'
+        if adapt: msg += f' (인터벌 {adapt[\"change\"]})'
+        if chain: msg += f' → chain triggered'
+        print(msg)
+" 2>/dev/null || echo "완료")
+      log "Pipeline completed: $completed_info"
+      osascript -e "display notification \"$completed_info\" with title \"AutoLoop\" sound name \"Glass\"" 2>/dev/null || true
     fi
 
     # 파이프라인 실패 감지 ("error": null이 아닌 실제 에러만)
@@ -124,6 +178,27 @@ tick_pipelines() {
     fi
   else
     log "Pipeline tick: 활성 파이프라인 없음"
+  fi
+}
+
+# ── 2b. 진화 요약 로깅 (10번째 tick마다) ───────────────────
+log_evolution_summary() {
+  local tick_count_file="$CONTROLLER_DIR/data/.tick_count"
+  local count=0
+  [[ -f "$tick_count_file" ]] && count=$(cat "$tick_count_file" 2>/dev/null || echo 0)
+  count=$(( count + 1 ))
+  echo "$count" > "$tick_count_file"
+
+  # 10번째 tick마다 진화 요약
+  if (( count % 10 == 0 )); then
+    local evo
+    evo=$($CTL pipeline evolution --pretty 2>&1) || true
+    if [[ -n "$evo" ]]; then
+      log "=== Evolution Summary (tick #$count) ==="
+      while IFS= read -r line; do
+        log "  $line"
+      done <<< "$evo"
+    fi
   fi
 }
 
@@ -231,13 +306,48 @@ rotate_logs() {
   fi
 }
 
+# ── 7. 오래된 작업 파일 정리 ─────────────────────────────────
+
+cleanup_old_jobs() {
+  local retention_days="${LOG_RETENTION_DAYS:-30}"
+  local cutoff_ts=$(( $(date +%s) - retention_days * 86400 ))
+  local cleaned=0
+
+  [[ -d "$LOGS_DIR" ]] || return 0
+
+  for meta_file in "$LOGS_DIR"/job_*.meta; do
+    [[ -f "$meta_file" ]] || continue
+
+    # running 상태는 건드리지 않음
+    local status
+    status=$(grep '^STATUS=' "$meta_file" 2>/dev/null | head -1 | cut -d= -f2 | tr -d "'" | tr -d '"')
+    [[ "$status" == "running" ]] && continue
+
+    # 파일 수정 시각 기준으로 보존 기간 확인
+    local mtime
+    mtime=$(stat -f%m "$meta_file" 2>/dev/null || stat -c%Y "$meta_file" 2>/dev/null || echo 0)
+    (( mtime >= cutoff_ts )) && continue
+
+    # job ID 추출 → 관련 파일 일괄 삭제
+    local base
+    base=$(basename "$meta_file" .meta)  # job_123
+    rm -f "$LOGS_DIR/${base}.meta" "$LOGS_DIR/${base}.out" "$LOGS_DIR/${base}.ext_id"
+    (( cleaned++ )) || true
+  done
+
+  if (( cleaned > 0 )); then
+    log "오래된 작업 파일 정리: ${cleaned}개 (보존 기간: ${retention_days}일)"
+  fi
+}
+
 # ── 메인 실행 ──────────────────────────────────────────────
 
 main() {
   log "========== autoloop tick =========="
 
-  # 1. 로그 로테이션 (가장 먼저 — 디스크 보호)
+  # 1. 로그 로테이션 + 오래된 작업 파일 정리 (가장 먼저 — 디스크 보호)
   rotate_logs
+  cleanup_old_jobs
 
   # 2. 서비스 헬스체크 + 자동 재시작
   if ! check_service; then
@@ -247,6 +357,7 @@ main() {
   # 3. 파이프라인 tick (서비스가 살아있을 때만 의미있음)
   if check_service 2>/dev/null; then
     tick_pipelines
+    log_evolution_summary
   fi
 
   # 4. Stuck job 감지

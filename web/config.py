@@ -21,7 +21,6 @@ RECENT_DIRS_FILE = DATA_DIR / "recent_dirs.json"
 SETTINGS_FILE = DATA_DIR / "settings.json"
 SERVICE_SCRIPT = CONTROLLER_DIR / "service" / "controller.sh"
 SESSIONS_DIR = CONTROLLER_DIR / "sessions"
-QUEUE_DIR = CONTROLLER_DIR / "queue"
 CLAUDE_PROJECTS_DIR = Path.home() / ".claude" / "projects"
 
 PORT = int(os.environ.get("PORT", 8420))
@@ -33,8 +32,6 @@ PORT = int(os.environ.get("PORT", 8420))
 # 허용된 Origin 목록 (CORS)
 # 환경변수 ALLOWED_ORIGINS로 오버라이드 가능 (쉼표 구분)
 _DEFAULT_ORIGINS = [
-    "http://claude.won-space.com",
-    "https://claude.won-space.com",
     "http://localhost:8420",
     "https://localhost:8420",
 ]
@@ -54,11 +51,11 @@ AUTH_REQUIRED = os.environ.get("AUTH_REQUIRED", "false").lower() == "true"
 
 # 인증 면제 경로 (AUTH_REQUIRED=true일 때만 적용)
 AUTH_EXEMPT_PREFIXES = ("/static/", "/uploads/", "/api/auth/")
-AUTH_EXEMPT_PATHS = {"/", "/index.html", "/styles.css", "/app.js"}
+AUTH_EXEMPT_PATHS = {"/", "/index.html", "/styles.css", "/app.js", "/api/health"}
 
 # 앱 실행 시 브라우저에서 열 공개 URL
 # 환경변수 PUBLIC_URL로 오버라이드 가능
-PUBLIC_URL = os.environ.get("PUBLIC_URL", "https://claude.won-space.com")
+PUBLIC_URL = os.environ.get("PUBLIC_URL", "https://localhost:8420")
 
 # SSL 인증서 경로 (mkcert 생성 파일)
 SSL_CERT = os.environ.get("SSL_CERT", str(CONTROLLER_DIR / "certs" / "localhost+1.pem"))

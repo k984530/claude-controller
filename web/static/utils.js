@@ -5,13 +5,19 @@
 function showToast(message, type = 'success') {
   const container = document.getElementById('toastContainer');
   const toast = document.createElement('div');
+  const duration = type === 'error' ? 6000 : 3000;
   toast.className = `toast ${type}`;
+  toast.style.setProperty('--toast-duration', `${duration}ms`);
   const icon = type === 'success'
     ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>'
     : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
-  toast.innerHTML = `${icon} ${escapeHtml(message)}`;
+  toast.innerHTML = `${icon} <span class="toast-msg">${escapeHtml(message)}</span><span class="toast-close">&times;</span>`;
+  toast.addEventListener('click', () => {
+    toast.style.animation = 'toastOut 0.2s ease forwards';
+    setTimeout(() => { if (toast.parentNode) toast.remove(); }, 200);
+  });
   container.appendChild(toast);
-  setTimeout(() => { if (toast.parentNode) toast.remove(); }, 3000);
+  setTimeout(() => { if (toast.parentNode) toast.remove(); }, duration);
 }
 
 function escapeHtml(str) {
@@ -19,6 +25,12 @@ function escapeHtml(str) {
   const d = document.createElement('div');
   d.textContent = str;
   return d.innerHTML;
+}
+
+/** JS 문자열 이스케이프 — onclick 핸들러 내 싱글쿼트 문자열에서 사용 */
+function escapeJsStr(str) {
+  if (!str) return '';
+  return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
 function truncate(str, len = 60) {
@@ -76,4 +88,44 @@ function formatFileSize(bytes) {
 function getFileExt(filename) {
   const dot = filename.lastIndexOf('.');
   return dot >= 0 ? filename.slice(dot + 1).toUpperCase() : '?';
+}
+
+/* ── Desktop Notification ── */
+function requestNotificationPermission() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+}
+
+function notifyJobDone(jobId, status, prompt) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  if (document.hasFocus()) return;
+  const title = status === 'done' ? `Job #${jobId} 완료` : `Job #${jobId} 실패`;
+  const body = truncate(prompt || '', 80);
+  const icon = status === 'done'
+    ? 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="80" font-size="80">%E2%9C%85</text></svg>'
+    : 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="80" font-size="80">%E2%9D%8C</text></svg>';
+  try {
+    const n = new Notification(title, { body, icon, tag: `job-${jobId}` });
+    n.onclick = () => { window.focus(); toggleJobExpand(String(jobId)); n.close(); };
+    setTimeout(() => n.close(), 8000);
+  } catch { /* silent */ }
+}
+
+/* ── Duration formatting ── */
+function formatDuration(durationMs) {
+  if (durationMs == null) return '';
+  const sec = durationMs / 1000;
+  return sec < 60 ? `${sec.toFixed(1)}s` : `${Math.floor(sec / 60)}m ${Math.round(sec % 60)}s`;
+}
+
+/* ── Theme ── */
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('theme', theme);
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  applyTheme(current === 'dark' ? 'light' : 'dark');
 }

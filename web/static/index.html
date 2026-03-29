@@ -14,6 +14,12 @@
 </head>
 <body>
 
+<!-- Connection lost banner -->
+<div class="conn-lost-banner" id="connLostBanner">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 1l22 22"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.56 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+  <span data-i18n="conn_lost">서버 연결이 끊어졌습니다. 재연결 시도 중...</span>
+</div>
+
 <!-- ── Layout ── -->
 <div class="layout">
 
@@ -65,6 +71,7 @@
               <label class="form-label" style="display:flex;align-items:center;gap:6px;">
                 <span data-i18n="prompt">프롬프트</span>
                 <span class="img-count-badge" id="imgCountBadge"></span>
+                <span id="personaBadge" style="display:none;"></span>
                 <span id="promptSessionInfo" style="margin-left:auto;font-size:0.68rem;font-weight:400;color:var(--text-muted);font-family:var(--font-mono,monospace);"></span>
               </label>
               <div class="prompt-wrapper" id="promptWrapper">
@@ -131,8 +138,16 @@
                 <input type="text" class="setting-input" id="automationInterval" placeholder="5m" style="width:60px;padding:3px 8px;font-size:0.72rem;">
                 <span class="automation-inline-hint">예: 30s, 5m, 1h</span>
               </div>
+              <!-- DAG 의존성 입력: AI 전용 (API depends_on), 프론트 UI 숨김 -->
+              <div class="automation-inline" id="depsRow" style="display:none;">
+                <input type="hidden" id="depsInput">
+              </div>
               <div class="form-actions-buttons">
                 <button type="button" class="btn" onclick="clearPromptForm();" data-i18n="reset">초기화</button>
+                <!-- DAG 버튼 숨김: AI가 API로 depends_on을 직접 사용 -->
+                <button type="button" class="btn" id="btnDepsToggle" onclick="toggleDeps()" style="display:none;">
+                  <span>DAG</span>
+                </button>
                 <button type="button" class="btn" id="btnAutoToggle" onclick="toggleAutomation()" title="자동화 모드 전환" style="display:flex;align-items:center;gap:4px;">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                   <span>자동화</span>
@@ -162,12 +177,48 @@
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
               <span data-i18n="delete_completed">완료 삭제</span>
             </button>
+            <button class="btn btn-sm btn-icon" id="btnViewMode" onclick="toggleJobViewMode()" title="프로젝트별 그룹 보기">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            </button>
             <button class="btn btn-sm btn-icon" onclick="fetchJobs()" title="새로고침">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
             </button>
             <button class="btn btn-sm btn-icon btn-collapse" id="btnCollapseJobs" onclick="toggleJobListCollapse()" title="최소화">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
             </button>
+          </div>
+        </div>
+        <div class="project-strip" id="projectStrip"></div>
+        <div class="project-detail" id="projectDetail" style="display:none;"></div>
+        <div class="stats-bar" id="statsBar">
+          <div class="stats-period-btns">
+            <button class="stats-period-btn active" data-period="all" onclick="setStatsPeriod('all')">전체</button>
+            <button class="stats-period-btn" data-period="day" onclick="setStatsPeriod('day')">24h</button>
+            <button class="stats-period-btn" data-period="week" onclick="setStatsPeriod('week')">7d</button>
+            <button class="stats-period-btn" data-period="month" onclick="setStatsPeriod('month')">30d</button>
+          </div>
+          <div class="stats-metrics" id="statsMetrics">
+            <span class="stats-metric" id="statTotal" title="전체 작업 수">-</span>
+            <span class="stats-metric stats-success" id="statSuccess" title="성공률">-</span>
+            <span class="stats-metric stats-duration" id="statDuration" title="평균 소요시간">-</span>
+          </div>
+        </div>
+        <div class="job-filter-bar" id="jobFilterBar">
+          <div class="job-filter-btns">
+            <button class="job-filter-btn active" data-filter="all" onclick="setJobFilter('all')">전체</button>
+            <button class="job-filter-btn" data-filter="running" onclick="setJobFilter('running')">실행 중</button>
+            <button class="job-filter-btn" data-filter="done" onclick="setJobFilter('done')">완료</button>
+            <button class="job-filter-btn" data-filter="failed" onclick="setJobFilter('failed')">실패</button>
+          </div>
+          <div class="job-project-filter">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            <select id="jobProjectSelect" onchange="setJobProjectFilter(this.value)">
+              <option value="all" data-i18n="all_projects">전체 프로젝트</option>
+            </select>
+          </div>
+          <div class="job-search-wrap">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" class="job-search-input" id="jobSearchInput" placeholder="프롬프트 검색..." oninput="applyJobFilters()">
           </div>
         </div>
         <div class="table-wrap" id="jobTableWrap">
@@ -179,38 +230,95 @@
                 <th data-i18n="prompt">프롬프트</th>
                 <th style="width:12%;" data-i18n="folder">폴더</th>
                 <th style="width:9%;">Session</th>
-                <th style="width:14%;" data-i18n="created_at">생성 시간</th>
                 <th style="width:10%;"></th>
               </tr>
             </thead>
             <tbody id="jobTableBody">
-              <tr data-job-id="__loading__"><td colspan="7" class="empty-state">
+              <tr data-job-id="__loading__"><td colspan="6" class="empty-state">
                 <div data-i18n="loading_jobs">작업 목록을 불러오는 중...</div>
               </td></tr>
             </tbody>
           </table>
+          <div id="jobPagination"></div>
         </div>
       </div>
     </div>
 
-    <!-- Section 3: Automations -->
+    <!-- Section 3: Presets -->
+    <div class="section" id="presetSection">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+            <span data-i18n="presets">프리셋</span>
+          </div>
+          <div class="card-header-actions">
+            <button class="btn btn-sm" onclick="openSavePresetDialog()" title="현재 자동화를 프리셋으로 저장">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+              <span data-i18n="save_as_preset">프리셋 저장</span>
+            </button>
+            <button class="btn btn-sm btn-icon" onclick="fetchPresets()" title="새로고침">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            </button>
+          </div>
+        </div>
+        <div id="presetGrid" class="preset-grid">
+          <div class="empty-state" style="padding:20px; text-align:center; color:var(--text-muted); font-size:0.8rem;">
+            프리셋을 불러오는 중...
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 3.5: Personas -->
+    <div class="section" id="personaSection">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span data-i18n="personas">페르소나</span>
+          </div>
+          <div class="card-header-actions">
+            <button class="btn btn-sm" onclick="openCreatePersonaDialog()" title="커스텀 페르소나 만들기">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <span>만들기</span>
+            </button>
+            <button class="btn btn-sm btn-icon" onclick="fetchPersonas()" title="새로고침">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            </button>
+          </div>
+        </div>
+        <div id="personaGrid" class="persona-grid">
+          <div class="empty-state" style="padding:20px; text-align:center; color:var(--text-muted); font-size:0.8rem;">
+            페르소나를 불러오는 중...
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 4: Automations -->
     <div class="section" id="pipelineSection">
       <div class="card">
         <div class="card-header">
           <div class="card-title">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            <span>자동화</span>
+            <span data-i18n="automations">자동화</span>
             <span id="pipelineCount" style="font-size:0.72rem; color:var(--text-muted); font-weight:400;"></span>
           </div>
           <div class="card-header-actions">
+            <button class="btn btn-sm btn-primary" onclick="openCreatePipeline()" title="새 자동화 생성">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <span style="margin-left:2px;">새 자동화</span>
+            </button>
             <button class="btn btn-sm btn-icon" onclick="fetchPipelines()" title="새로고침">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
             </button>
           </div>
         </div>
+        <div id="evolutionSummary"></div>
         <div id="pipelineList" class="pipeline-list">
           <div class="empty-state" style="padding:20px; text-align:center; color:var(--text-muted); font-size:0.8rem;">
-            자동화가 없습니다. 위 입력창에서 자동화 버튼을 눌러 등록하세요.
+            자동화가 없습니다. 위 프리셋을 적용하거나 입력창에서 자동화를 등록하세요.
           </div>
         </div>
       </div>
@@ -220,6 +328,12 @@
 </div>
 
 <!-- Pipeline modal removed — 자동화 등록은 입력창에서 직접 수행 -->
+
+<!-- Theme Toggle FAB -->
+<button class="theme-fab" onclick="toggleTheme()" title="테마 전환">
+  <svg class="theme-icon-dark" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+  <svg class="theme-icon-light" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+</button>
 
 <!-- Settings FAB -->
 <button class="settings-fab" onclick="openSettings()" title="설정">
@@ -263,6 +377,54 @@
         </div>
       </div>
 
+      <!-- 웹훅 / Webhook -->
+      <div class="settings-section">
+        <div class="settings-section-title" data-i18n="webhook_settings">웹훅 설정</div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label" data-i18n="webhook_url">Webhook URL</div>
+            <div class="setting-desc" data-i18n="webhook_url_desc">작업 완료/실패 시 결과를 POST할 URL</div>
+          </div>
+          <div class="setting-control">
+            <input type="url" class="setting-input" id="cfgWebhookUrl" placeholder="https://example.com/webhook" style="width:260px;">
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label" data-i18n="webhook_secret">Webhook Secret</div>
+            <div class="setting-desc" data-i18n="webhook_secret_desc">HMAC-SHA256 서명용 비밀 키 (선택사항)</div>
+          </div>
+          <div class="setting-control">
+            <input type="password" class="setting-input" id="cfgWebhookSecret" placeholder="선택사항" style="width:260px;">
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label" data-i18n="webhook_events">이벤트 필터</div>
+            <div class="setting-desc" data-i18n="webhook_events_desc">웹훅을 보낼 이벤트 (done, failed)</div>
+          </div>
+          <div class="setting-control">
+            <select class="setting-input" id="cfgWebhookEvents" style="width:160px;">
+              <option value="done,failed">전체 (done, failed)</option>
+              <option value="done">완료만 (done)</option>
+              <option value="failed">실패만 (failed)</option>
+            </select>
+          </div>
+        </div>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label" data-i18n="webhook_test">연결 테스트</div>
+            <div class="setting-desc" data-i18n="webhook_test_desc">설정된 URL로 테스트 이벤트를 전송합니다</div>
+          </div>
+          <div class="setting-control">
+            <button class="btn btn-sm" id="btnWebhookTest" onclick="testWebhook()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+              테스트 전송
+            </button>
+          </div>
+        </div>
+      </div>
+
     </div>
     <div class="settings-footer">
       <button class="btn" onclick="closeSettings()" data-i18n="close">닫기</button>
@@ -278,7 +440,7 @@
 
 <script>
 // 캐시 버스팅: 순서 보장 로드
-['i18n','utils','api','context','attachments','dirs','send','stream','jobs','pipelines','settings','app']
+['i18n','utils','api','context','attachments','dirs','send','stream','jobs','pipelines','presets','personas','settings','app']
 .forEach(m => { const s = document.createElement('script'); s.src = m + '.js?t=' + Date.now(); s.async = false; document.body.appendChild(s); });
 </script>
 </body>

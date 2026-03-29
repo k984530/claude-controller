@@ -522,8 +522,8 @@ textarea { min-height: unset; position: relative; }
 }
 
 .prompt-wrapper.drag-over textarea {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-glow);
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .drop-overlay {
@@ -545,6 +545,7 @@ textarea { min-height: unset; position: relative; }
 
 .prompt-wrapper.drag-over .drop-overlay {
   display: flex;
+  box-shadow: 0 0 0 3px var(--accent-glow);
 }
 
 .image-previews {

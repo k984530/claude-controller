@@ -37,13 +37,22 @@ async function autoConnect() {
 
 async function init() {
   applyI18n();
+  applyTheme(localStorage.getItem('theme') || 'dark');
   await autoConnect();
   loadRecentDirs();
+  fetchPresets();
+  fetchPersonas();
   fetchPipelines();
   checkStatus();
+  fetchRegisteredProjects();
   fetchJobs();
+  fetchStats();
+  _applyJobListCollapse();
+  requestNotificationPermission();
 
   jobPollTimer = setInterval(fetchJobs, 3000);
+  setInterval(fetchStats, 15000);
+  setInterval(fetchRegisteredProjects, 30000);
   setInterval(checkStatus, 10000);
 
   const promptInput = document.getElementById('promptInput');

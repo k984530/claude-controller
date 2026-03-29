@@ -86,6 +86,13 @@ _on_signal() {
 
 trap _on_signal SIGTERM SIGINT SIGHUP
 
+# ── meta 파일 인젝션 방지 ─────────────────────────────────────
+# 개행·제어문자를 제거하여 KEY=VALUE 라인 인젝션을 방지한다.
+# Python 측 _sanitize_meta_value()와 동일한 역할.
+_sanitize_meta_val() {
+  printf '%s' "$1" | tr -d '\000-\037\177'
+}
+
 # ── 중복 디스패치 방지 ────────────────────────────────────────
 # 최근 디스패치된 프롬프트 해시와 타임스탬프를 기록
 _LAST_DISPATCH_HASH=""
@@ -161,16 +168,40 @@ dispatch_job() {
     return 1
   fi
 
-  # Job 등록
-  local job_id
-  job_id=$(job_register "$prompt")
+  # ── pending 작업 재사용 (DAG 의존성 디스패치) ──
+  local pending_jid
+  pending_jid=$(echo "$json_line" | jq -r '.pending_job_id // empty')
 
-  local out_file="${LOGS_DIR}/job_${job_id}.out"
-  local meta_file="${LOGS_DIR}/job_${job_id}.meta"
+  local job_id meta_file out_file
+  # 사용자 입력값 새니타이즈 (meta 파일 인젝션 방지)
+  job_uuid=$(_sanitize_meta_val "$job_uuid")
+  cwd=$(_sanitize_meta_val "$cwd")
 
-  # .meta 파일에 UUID 기록 (원자적 append: temp → rename)
-  local _tmp="${meta_file}.tmp.$$"
-  { cat "$meta_file"; echo "UUID=${job_uuid}"; } > "$_tmp" && mv -f "$_tmp" "$meta_file"
+  if [[ -n "$pending_jid" ]]; then
+    local pending_meta="${LOGS_DIR}/job_${pending_jid}.meta"
+    if [[ -f "$pending_meta" ]]; then
+      job_id="$pending_jid"
+      meta_file="$pending_meta"
+      _meta_set_field "$meta_file" "STATUS" "running"
+      rm -f "${LOGS_DIR}/job_${pending_jid}.pending"
+      _log_info "Pending Job #${job_id} 디스패치 (DAG 의존성 충족)"
+    else
+      job_id=$(job_register "$prompt")
+      meta_file="${LOGS_DIR}/job_${job_id}.meta"
+      local _tmp="${meta_file}.tmp.$$"
+      { cat "$meta_file"; echo "UUID=${job_uuid}"; } > "$_tmp" && mv -f "$_tmp" "$meta_file"
+    fi
+  else
+    # Job 등록
+    job_id=$(job_register "$prompt")
+    meta_file="${LOGS_DIR}/job_${job_id}.meta"
+
+    # .meta 파일에 UUID 기록 (원자적 append: temp → rename)
+    local _tmp="${meta_file}.tmp.$$"
+    { cat "$meta_file"; echo "UUID=${job_uuid}"; } > "$_tmp" && mv -f "$_tmp" "$meta_file"
+  fi
+
+  out_file="${LOGS_DIR}/job_${job_id}.out"
 
   # ── Worktree 결정: 재사용(rewind) > 새로 생성 ──
   local wt_path=""
@@ -406,11 +437,12 @@ start_service() {
 
   # FIFO 생성
   if [[ -p "$FIFO_PATH" ]]; then
-    _log_warn "기존 FIFO 파이프 발견. 재사용합니다: ${FIFO_PATH}"
+    chmod 600 "$FIFO_PATH"
+    _log_warn "기존 FIFO 파이프 발견. 권한 확인 후 재사용합니다: ${FIFO_PATH}"
   else
     rm -f "$FIFO_PATH"
-    mkfifo "$FIFO_PATH"
-    _log_info "FIFO 파이프 생성됨: ${FIFO_PATH}"
+    mkfifo -m 600 "$FIFO_PATH"
+    _log_info "FIFO 파이프 생성됨 (mode 600): ${FIFO_PATH}"
   fi
 
   # PID 기록

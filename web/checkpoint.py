@@ -13,6 +13,14 @@ from config import LOGS_DIR
 from utils import parse_meta_file
 from jobs import send_to_fifo
 
+_GIT_HASH_RE = re.compile(r'^[0-9a-fA-F]{4,40}$')
+
+
+def _validate_git_hash(value):
+    """git commit hash 형식을 검증한다. 유효하지 않으면 ValueError를 발생시킨다."""
+    if not value or not _GIT_HASH_RE.match(value):
+        raise ValueError(f"유효하지 않은 git hash입니다: {value!r}")
+
 
 def get_job_checkpoints(job_id):
     """worktree의 git log에서 해당 job의 checkpoint 커밋 목록을 반환한다."""
@@ -108,8 +116,80 @@ def extract_conversation_context(out_file, max_chars=4000):
     return full[:max_chars]
 
 
+def diff_checkpoints(job_id, from_hash, to_hash=None):
+    """두 체크포인트 간 diff를 반환한다. to_hash 생략 시 from_hash의 부모와 비교."""
+    try:
+        _validate_git_hash(from_hash)
+        if to_hash:
+            _validate_git_hash(to_hash)
+    except ValueError as e:
+        return None, str(e)
+
+    meta_file = LOGS_DIR / f"job_{job_id}.meta"
+    if not meta_file.exists():
+        return None, "작업을 찾을 수 없습니다"
+
+    meta = parse_meta_file(meta_file)
+    wt_path = meta.get("WORKTREE", "")
+    if not wt_path or not os.path.isdir(wt_path):
+        return None, "워크트리를 찾을 수 없습니다"
+
+    # to_hash가 없으면 from_hash 단독 커밋의 변경사항 (부모 대비)
+    if not to_hash:
+        diff_spec = [f"{from_hash}^", from_hash]
+    else:
+        diff_spec = [from_hash, to_hash]
+
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--no-color", "-U3"] + diff_spec,
+            cwd=wt_path, capture_output=True, text=True, timeout=15
+        )
+        raw_diff = result.stdout
+
+        # 파일별로 파싱
+        files = []
+        current = None
+        for line in raw_diff.split("\n"):
+            if line.startswith("diff --git"):
+                if current:
+                    files.append(current)
+                # "diff --git a/path b/path" → path 추출
+                parts = line.split(" b/", 1)
+                fname = parts[1] if len(parts) > 1 else "unknown"
+                current = {"file": fname, "chunks": [], "additions": 0, "deletions": 0}
+            elif current is not None:
+                current["chunks"].append(line)
+                if line.startswith("+") and not line.startswith("+++"):
+                    current["additions"] += 1
+                elif line.startswith("-") and not line.startswith("---"):
+                    current["deletions"] += 1
+
+        if current:
+            files.append(current)
+
+        return {
+            "from": diff_spec[0],
+            "to": diff_spec[1],
+            "files": files,
+            "total_files": len(files),
+            "total_additions": sum(f["additions"] for f in files),
+            "total_deletions": sum(f["deletions"] for f in files),
+        }, None
+
+    except subprocess.TimeoutExpired:
+        return None, "diff 생성 시간 초과"
+    except OSError as e:
+        return None, f"diff 실패: {e}"
+
+
 def rewind_job(job_id, checkpoint_hash, new_prompt):
     """job을 특정 checkpoint로 되돌리고 새 job을 디스패치한다."""
+    try:
+        _validate_git_hash(checkpoint_hash)
+    except ValueError as e:
+        return None, str(e)
+
     meta_file = LOGS_DIR / f"job_{job_id}.meta"
     out_file = LOGS_DIR / f"job_{job_id}.out"
 

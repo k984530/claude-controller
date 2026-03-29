@@ -29,6 +29,32 @@
   --shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
 
+/* ── Light Theme ── */
+[data-theme="light"] {
+  --bg: #f5f6fa;
+  --surface: #ffffff;
+  --surface-hover: #f0f1f5;
+  --surface-active: #e8e9ef;
+  --border: #d8dae3;
+  --border-light: #c5c8d4;
+  --text: #1a1d27;
+  --text-secondary: #4a4e63;
+  --text-muted: #8b8fa3;
+  --accent: #4f6cf7;
+  --accent-hover: #3d5ce5;
+  --accent-glow: rgba(79, 108, 247, 0.12);
+  --green: #0d9668;
+  --green-dim: rgba(13, 150, 104, 0.1);
+  --red: #dc3545;
+  --red-dim: rgba(220, 53, 69, 0.08);
+  --yellow: #c07d10;
+  --yellow-dim: rgba(192, 125, 16, 0.08);
+  --blue: #2563eb;
+  --blue-dim: rgba(37, 99, 235, 0.08);
+  --shadow: 0 2px 8px rgba(0,0,0,0.08);
+  --stream-bg: #f0f1f5;
+}
+
 html { font-size: 14px; }
 
 body {
@@ -164,6 +190,7 @@ button {
   border: 1px solid transparent;
   letter-spacing: 0.02em;
   text-transform: lowercase;
+  transition: all 0.15s ease;
 }
 
 .ctx-btn:hover {
@@ -176,6 +203,14 @@ button {
   background: var(--accent-glow);
   color: var(--accent);
   border-color: var(--accent);
+}
+
+.ctx-btn.active[id="ctxResume"],
+.ctx-btn.active[id="ctxFork"] {
+  background: var(--blue);
+  color: #fff;
+  border-color: var(--blue);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
 }
 
 .ctx-btn-x {
@@ -200,21 +235,32 @@ button {
 
 .ctx-session-label {
   display: none;
-  padding: 2px 8px;
+  padding: 3px 10px;
   border-radius: 12px;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
+  font-weight: 600;
   font-family: var(--font-mono);
-  background: var(--blue-dim);
-  color: var(--blue);
+  background: var(--blue);
+  color: #fff;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   line-height: 1.6;
   min-width: 0;
+  max-width: 200px;
+  box-shadow: 0 0 0 2px var(--blue-dim), 0 1px 4px rgba(0,0,0,0.15);
+  animation: ctx-label-pop 0.2s ease-out;
+}
+
+@keyframes ctx-label-pop {
+  from { opacity: 0; transform: scale(0.9); }
+  to   { opacity: 1; transform: scale(1); }
 }
 
 .ctx-session-label.visible {
-  display: inline;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .session-picker {
@@ -369,13 +415,6 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.session-item-cost {
-  font-size: 0.65rem;
-  color: var(--green);
-  font-family: var(--font-mono);
-  flex-shrink: 0;
 }
 
 .session-filter-bar {

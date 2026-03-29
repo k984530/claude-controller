@@ -4,6 +4,7 @@
 
 let _sendLock = false;
 let _automationMode = false;
+let _depsMode = false;
 
 function toggleAutomation() {
   _automationMode = !_automationMode;
@@ -22,12 +23,24 @@ function toggleAutomation() {
   }
 }
 
+function toggleDeps() {
+  // DAG UI는 숨김 처리됨 — AI가 API depends_on으로 직접 사용
+  _depsMode = !_depsMode;
+  const row = document.getElementById('depsRow');
+  if (row) row.style.display = _depsMode ? 'flex' : 'none';
+  if (!_depsMode) {
+    const inp = document.getElementById('depsInput');
+    if (inp) inp.value = '';
+  }
+}
+
 function clearPromptForm() {
   document.getElementById('promptInput').value = '';
   clearAttachments();
   updatePromptMirror();
   clearDirSelection();
   if (_automationMode) toggleAutomation();
+  if (_depsMode) toggleDeps();
 }
 
 async function sendTask(e) {
@@ -54,8 +67,7 @@ async function sendTask(e) {
         body: JSON.stringify({ project_path: cwd, command: prompt, interval }),
       });
       showToast(`자동화 등록: ${pipe.name || pipe.id}`);
-      document.getElementById('promptInput').value = '';
-      toggleAutomation();
+      clearPromptForm();
       fetchPipelines();
       runPipeline(pipe.id);
     } catch (err) {
@@ -94,13 +106,23 @@ async function sendTask(e) {
 
     if (filePaths.length > 0) body.images = filePaths;
 
-    await apiFetch('/api/send', { method: 'POST', body: JSON.stringify(body) });
+    // 의존성 모드: depends_on 추가
+    if (_depsMode) {
+      const depsVal = document.getElementById('depsInput').value.trim();
+      if (depsVal) {
+        body.depends_on = depsVal.split(/[,\s]+/).filter(Boolean);
+      }
+    }
+
+    const result = await apiFetch('/api/send', { method: 'POST', body: JSON.stringify(body) });
     const modeMsg = _contextMode === 'resume' ? ' (resume)' : _contextMode === 'fork' ? ' (fork)' : '';
-    showToast(t('msg_task_sent') + modeMsg);
+    const depMsg = result && result.status === 'pending' ? ' (대기 중 — 선행 작업 완료 후 실행)' : '';
+    showToast(t('msg_task_sent') + modeMsg + depMsg);
     if (cwd) addRecentDir(cwd);
     document.getElementById('promptInput').value = '';
     clearAttachments();
     clearContext();
+    if (_depsMode) toggleDeps();
     fetchJobs();
   } catch (err) {
     showToast(`${t('msg_send_failed')}: ${err.message}`, 'error');

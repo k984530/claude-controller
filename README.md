@@ -7,7 +7,7 @@ A shell wrapper that runs Claude Code CLI as a headless daemon. Provides FIFO pi
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  Web Dashboard (Vanilla JS)                                     │
-│  https://claude.won-space.com  <->  localhost:8420              │
+│  https://localhost:8420                                         │
 └────────────────────┬────────────────────────────────────────────┘
                      │ REST API (Python http.server)
 ┌────────────────────▼────────────────────────────────────────────┐
@@ -202,7 +202,7 @@ Override settings via `data/settings.json` or environment variables:
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `skip_permissions` | `true` | Use `--dangerously-skip-permissions` flag |
+| `skip_permissions` | `false` | Use `--dangerously-skip-permissions` flag (false: `--allowedTools` 사용) |
 | `model` | `""` | Claude model override (empty = default model) |
 | `max_jobs` | `10` | Max concurrent background jobs |
 | `target_repo` | `""` | Git repository path for Worktree creation |

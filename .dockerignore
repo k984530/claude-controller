@@ -1,0 +1,28 @@
+# ── Git ──
+.git
+.gitignore
+
+# ── 런타임 데이터 (볼륨으로 마운트됨) ──
+logs/
+data/
+queue/
+sessions/
+uploads/
+worktrees/
+certs/
+
+# ── 빌드 아티팩트 ──
+*.tgz
+node_modules/
+
+# ── 개발/문서 ──
+REVIEW.md
+PLAN.md
+memory/
+cognitive/
+dag/
+
+# ── Docker 자체 ──
+Dockerfile
+docker-compose.yml
+.dockerignore

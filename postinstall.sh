@@ -66,7 +66,7 @@ SETTINGS_FILE="${CONTROLLER_DIR}/data/settings.json"
 if [[ ! -f "$SETTINGS_FILE" ]]; then
   cat > "$SETTINGS_FILE" << 'SETTINGS'
 {
-  "skip_permissions": true,
+  "skip_permissions": false,
   "allowed_tools": "Bash,Read,Write,Edit,Glob,Grep,Agent,NotebookEdit,WebFetch,WebSearch",
   "model": "",
   "max_jobs": 10,

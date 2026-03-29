@@ -66,7 +66,7 @@ job_register() {
   local meta_file="${LOGS_DIR}/job_${job_id}.meta"
   # 프롬프트 내의 특수문자를 이스케이프하여 안전하게 저장
   local safe_prompt
-  safe_prompt=$(printf '%s' "$prompt" | head -c 500 | sed "s/'/'\\\\''/g")
+  safe_prompt=$(printf '%s' "$prompt" | head -c 500 | tr -d '\000-\037\177' | sed "s/'/'\\\\''/g")
   cat > "$meta_file" <<EOF
 JOB_ID=${job_id}
 STATUS=running
@@ -105,12 +105,23 @@ job_mark_done() {
   local job_id="$1"
   local meta_file="${LOGS_DIR}/job_${job_id}.meta"
   _meta_set_field "$meta_file" "STATUS" "done"
+  _fire_webhook "$job_id" "done"
 }
 
 job_mark_failed() {
   local job_id="$1"
   local meta_file="${LOGS_DIR}/job_${job_id}.meta"
   _meta_set_field "$meta_file" "STATUS" "failed"
+  _fire_webhook "$job_id" "failed"
+}
+
+# ── 웹훅 전달 (백그라운드) ─────────────────────────────────
+_fire_webhook() {
+  local job_id="$1" status="$2"
+  local webhook_script="${CONTROLLER_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/web/webhook.py"
+  [[ -f "$webhook_script" ]] || return 0
+  # 백그라운드에서 실행 — 작업 완료 흐름을 차단하지 않는다
+  python3 "$webhook_script" "$job_id" "$status" &>/dev/null &
 }
 
 # ── 상태 조회 ──────────────────────────────────────────────

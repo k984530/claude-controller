@@ -12,7 +12,8 @@ import subprocess
 import time
 from pathlib import Path
 
-from config import DATA_DIR
+from config import DATA_DIR, LOGS_DIR
+from utils import parse_meta_file
 
 PROJECTS_FILE = DATA_DIR / "projects.json"
 
@@ -37,6 +38,40 @@ def _save_projects(projects: list[dict]):
 
 def _generate_id() -> str:
     return f"{int(time.time())}-{os.getpid()}-{id(time) % 10000}"
+
+
+def _collect_job_stats_by_cwd() -> dict:
+    """logs/ 디렉토리의 .meta 파일을 순회하여 cwd별 job 통계를 집계한다."""
+    stats = {}
+    if not LOGS_DIR.exists():
+        return stats
+    for mf in LOGS_DIR.glob("job_*.meta"):
+        meta = parse_meta_file(mf)
+        if not meta:
+            continue
+        cwd = meta.get("CWD", "")
+        if not cwd:
+            continue
+        norm = os.path.normpath(cwd)
+        if norm not in stats:
+            stats[norm] = {"total": 0, "running": 0, "done": 0, "failed": 0, "cost": 0.0}
+        s = stats[norm]
+        s["total"] += 1
+        status = meta.get("STATUS", "unknown")
+        if status == "running":
+            pid = meta.get("PID")
+            if pid:
+                try:
+                    os.kill(int(pid), 0)
+                except (ProcessLookupError, ValueError, OSError):
+                    status = "done"
+        if status == "running":
+            s["running"] += 1
+        elif status == "done":
+            s["done"] += 1
+        elif status == "failed":
+            s["failed"] += 1
+    return stats
 
 
 def _detect_git_info(path: str) -> dict:
@@ -71,12 +106,31 @@ def _detect_git_info(path: str) -> dict:
 #  CRUD
 # ══════════════════════════════════════════════════════════════
 
-def list_projects() -> list[dict]:
-    """등록된 프로젝트 목록을 반환한다."""
+def list_projects(include_job_stats=True) -> list[dict]:
+    """등록된 프로젝트 목록을 반환한다.
+
+    Args:
+        include_job_stats: True이면 각 프로젝트의 job 통계를 포함한다.
+    """
     projects = _load_projects()
-    # 경로 유효성 보강
+
+    # job 통계를 위한 cwd→count 맵 (한 번만 순회)
+    job_stats = {}
+    if include_job_stats:
+        job_stats = _collect_job_stats_by_cwd()
+
     for p in projects:
         p["exists"] = os.path.isdir(p.get("path", ""))
+        if include_job_stats:
+            norm_path = os.path.normpath(p.get("path", ""))
+            stats = job_stats.get(norm_path, {})
+            p["job_stats"] = {
+                "total": stats.get("total", 0),
+                "running": stats.get("running", 0),
+                "done": stats.get("done", 0),
+                "failed": stats.get("failed", 0),
+                "total_cost": round(stats.get("cost", 0), 4),
+            }
     return projects
 
 

@@ -36,6 +36,11 @@ Usage:
   ctl pipeline tick                               모든 활성 파이프라인 진행
   ctl pipeline reset --id <id>                    상태 초기화
   ctl pipeline delete --id <id>                   파이프라인 삭제
+  ctl summary                                     전체 상태 요약 (AI 컨텍스트용)
+  ctl stats [--limit N]                           작업 통계 집계
+  ctl health                                      헬스체크 + 디스크 + stuck 작업
+  ctl watchdog [start|stop|status|install|uninstall] 프로세스 워치독 관리
+  ctl job <id> text                               최종 텍스트 결과만 추출
 
 Output: 기본 JSON. --pretty 플래그로 포맷팅된 출력.
 """
@@ -55,7 +60,7 @@ sys.path.insert(0, str(CONTROLLER_DIR / "web"))
 from config import (
     LOGS_DIR, UPLOADS_DIR, DATA_DIR,
     RECENT_DIRS_FILE, SETTINGS_FILE, SESSIONS_DIR,
-    CLAUDE_PROJECTS_DIR,
+    CLAUDE_PROJECTS_DIR, FIFO_PATH,
 )
 from jobs import get_all_jobs, get_job_result, send_to_fifo, start_controller_service, stop_controller_service
 from checkpoint import get_job_checkpoints, rewind_job
@@ -65,6 +70,7 @@ from pipeline import (
     list_pipelines, get_pipeline_status, create_pipeline, delete_pipeline,
     run_next, force_run, reset_phase, tick, tick_all,
 )
+import shutil
 
 
 # ══════════════════════════════════════════════════════════════
@@ -245,6 +251,11 @@ def cmd_job(args):
             err(error)
         out(result, args.pretty)
 
+    # ── text (최종 텍스트만) ──
+    elif args.action == "text":
+        cmd_job_text(job_id, args.pretty, raw=getattr(args, "raw", False))
+        return
+
     # ── 기본: 결과 조회 ──
     else:
         result, error = get_job_result(job_id)
@@ -349,7 +360,7 @@ def cmd_sessions(args):
 def cmd_config(args):
     """설정 조회 또는 변경."""
     defaults = {
-        "skip_permissions": True,
+        "skip_permissions": False,
         "allowed_tools": "Bash,Read,Write,Edit,Glob,Grep,Agent,NotebookEdit,WebFetch,WebSearch",
         "model": "",
         "max_jobs": 10,
@@ -734,6 +745,296 @@ def cmd_pipeline(args):
             err(error)
         out({"deleted": True, "pipeline": result}, args.pretty)
 
+    elif action == "evolution":
+        from pipeline import get_evolution_summary
+        summary = get_evolution_summary()
+        if args.pretty:
+            print(f"파이프라인 진화 요약")
+            print(f"  활성: {summary['active_count']}/{summary['total_pipelines']}")
+            print(f"  총 실행: {summary['total_runs']}회  |  총 비용: ${summary['total_cost_usd']}")
+            print(f"  효율성: {summary['efficiency_pct']}% (변경 있는 실행 비율)")
+            cls = summary["classifications"]
+            print(f"  분류: 변경있음={cls.get('has_change',0)} / 변경없음={cls.get('no_change',0)} / 불명={cls.get('unknown',0)}")
+            if summary["interval_adaptations"]:
+                print(f"  인터벌 적응:")
+                for ia in summary["interval_adaptations"]:
+                    print(f"    {ia['name']}: {ia['base_sec']}s → {ia['effective_sec']}s ({ia['change_pct']:+d}%)")
+        else:
+            out(summary, False)
+
+
+# ══════════════════════════════════════════════════════════════
+#  AI 컨텍스트 명령어 — summary, stats, health, job text
+# ══════════════════════════════════════════════════════════════
+
+def cmd_summary(args):
+    """서비스 + 최근 작업 + 파이프라인을 한 번에 요약."""
+    running, pid = is_service_running()
+
+    jobs = get_all_jobs()
+    total = len(jobs)
+    by_status = {}
+    recent_failures = []
+    total_cost = 0.0
+    running_jobs = []
+
+    for j in jobs:
+        st = j.get("status", "unknown")
+        by_status[st] = by_status.get(st, 0) + 1
+        if j.get("cost_usd"):
+            total_cost += j["cost_usd"]
+        if st == "running":
+            running_jobs.append({
+                "job_id": j["job_id"],
+                "prompt": (j.get("prompt") or "")[:80],
+                "cwd": j.get("cwd"),
+            })
+        if st == "failed":
+            recent_failures.append({
+                "job_id": j["job_id"],
+                "prompt": (j.get("prompt") or "")[:80],
+                "result": (j.get("result") or "")[:200],
+            })
+
+    done = by_status.get("done", 0)
+    failed = by_status.get("failed", 0)
+    success_rate = round(done / (done + failed), 3) if (done + failed) > 0 else None
+
+    # 파이프라인 요약
+    pipes = list_pipelines()
+    active_pipes = [
+        {"id": p["id"], "name": p.get("name", ""), "status": p.get("status", ""), "command": (p.get("command") or "")[:60]}
+        for p in pipes if p.get("status") in ("running", "idle")
+    ]
+
+    result = {
+        "service": {"running": running, "pid": pid},
+        "jobs": {
+            "total": total,
+            "by_status": by_status,
+            "success_rate": success_rate,
+            "total_cost_usd": round(total_cost, 4),
+            "running": running_jobs,
+            "recent_failures": recent_failures[:5],
+        },
+        "pipelines": {"total": len(pipes), "active": active_pipes},
+    }
+    out(result, args.pretty)
+
+
+def cmd_stats(args):
+    """작업 통계 집계 — 성공률, 비용, 소요시간, 에러 패턴."""
+    jobs = get_all_jobs()
+
+    # 기간 필터
+    limit = args.limit or len(jobs)
+    jobs = jobs[:limit]
+
+    total = len(jobs)
+    done_count = 0
+    failed_count = 0
+    costs = []
+    durations = []
+    error_patterns = {}
+
+    for j in jobs:
+        st = j.get("status", "unknown")
+        if st == "done":
+            done_count += 1
+        elif st == "failed":
+            failed_count += 1
+            # 에러 패턴 수집
+            result_text = (j.get("result") or "")[:300]
+            if result_text:
+                # 첫 줄을 패턴 키로 사용
+                key = result_text.split("\n")[0][:80]
+                error_patterns[key] = error_patterns.get(key, 0) + 1
+
+        if j.get("cost_usd"):
+            costs.append(j["cost_usd"])
+        if j.get("duration_ms"):
+            durations.append(j["duration_ms"])
+
+    completed = done_count + failed_count
+    result = {
+        "total_jobs": total,
+        "completed": completed,
+        "done": done_count,
+        "failed": failed_count,
+        "success_rate": round(done_count / completed, 3) if completed > 0 else None,
+        "cost": {
+            "total_usd": round(sum(costs), 4) if costs else 0,
+            "avg_usd": round(sum(costs) / len(costs), 4) if costs else None,
+            "max_usd": round(max(costs), 4) if costs else None,
+        },
+        "duration": {
+            "avg_ms": round(sum(durations) / len(durations)) if durations else None,
+            "median_ms": round(sorted(durations)[len(durations) // 2]) if durations else None,
+            "max_ms": max(durations) if durations else None,
+        },
+        "top_errors": dict(sorted(error_patterns.items(), key=lambda x: -x[1])[:5]),
+    }
+    out(result, args.pretty)
+
+
+def cmd_health(args):
+    """서비스 상태 + 디스크 사용량 + stuck 작업 + 고아 프로세스."""
+    running, pid = is_service_running()
+
+    # 디스크 사용량
+    def dir_size_mb(path):
+        total = 0
+        p = Path(path)
+        if not p.exists():
+            return 0
+        for f in p.rglob("*"):
+            if f.is_file():
+                total += f.stat().st_size
+        return round(total / (1024 * 1024), 2)
+
+    disk = {
+        "logs_mb": dir_size_mb(LOGS_DIR),
+        "uploads_mb": dir_size_mb(UPLOADS_DIR),
+        "worktrees_mb": dir_size_mb(CONTROLLER_DIR / "worktrees"),
+    }
+    total_disk = CONTROLLER_DIR.resolve()
+    usage = shutil.disk_usage(str(total_disk))
+    disk["system_free_gb"] = round(usage.free / (1024 ** 3), 2)
+
+    # Stuck 작업 (30분 이상 running)
+    jobs = get_all_jobs()
+    stuck = []
+    import datetime
+    now = datetime.datetime.now()
+    for j in jobs:
+        if j.get("status") != "running":
+            continue
+        created = j.get("created_at", "")
+        if not created:
+            continue
+        try:
+            started = datetime.datetime.strptime(created, "%Y-%m-%d %H:%M:%S")
+            elapsed_min = (now - started).total_seconds() / 60
+            if elapsed_min > 30:
+                stuck.append({
+                    "job_id": j["job_id"],
+                    "prompt": (j.get("prompt") or "")[:60],
+                    "elapsed_min": round(elapsed_min, 1),
+                })
+        except ValueError:
+            continue
+
+    # FIFO 상태
+    fifo_ok = FIFO_PATH.exists() and Path(FIFO_PATH).is_fifo() if hasattr(Path, 'is_fifo') else FIFO_PATH.exists()
+
+    result = {
+        "service": {"running": running, "pid": pid, "fifo_ok": fifo_ok},
+        "disk": disk,
+        "stuck_jobs": stuck,
+        "job_counts": {
+            "total": len(jobs),
+            "running": sum(1 for j in jobs if j.get("status") == "running"),
+        },
+    }
+    out(result, args.pretty)
+
+
+def cmd_watchdog(args):
+    """워치독 관리 — start/stop/status/install/uninstall."""
+    action = args.action or "status"
+    watchdog_sh = CONTROLLER_DIR / "bin" / "watchdog.sh"
+    state_file = CONTROLLER_DIR / "data" / "watchdog_state.json"
+    pid_file = CONTROLLER_DIR / "service" / "watchdog.pid"
+
+    if action in ("start", "stop", "install", "uninstall"):
+        import subprocess
+        result = subprocess.run(
+            ["bash", str(watchdog_sh), action],
+            capture_output=True, text=True
+        )
+        if result.stdout.strip():
+            if args.pretty:
+                out({"action": action, "message": result.stdout.strip()}, True)
+            else:
+                print(result.stdout.strip())
+        if result.returncode != 0 and result.stderr.strip():
+            print(result.stderr.strip(), file=sys.stderr)
+            sys.exit(result.returncode)
+    else:
+        # status — JSON 출력
+        running = False
+        pid = None
+        state = {}
+
+        if pid_file.exists():
+            try:
+                pid = int(pid_file.read_text().strip())
+                import signal
+                os.kill(pid, 0)
+                running = True
+            except (ValueError, OSError):
+                pid = None
+
+        if state_file.exists():
+            try:
+                state = json.loads(state_file.read_text())
+            except (json.JSONDecodeError, OSError):
+                pass
+
+        out({
+            "running": running,
+            "pid": pid,
+            "status": state.get("status", "unknown"),
+            "restart_count": state.get("restart_count", 0),
+            "consecutive_fails": state.get("consecutive_fails", 0),
+            "last_restart": state.get("last_restart", ""),
+            "last_check": state.get("last_check", ""),
+            "message": state.get("message", ""),
+        }, args.pretty)
+
+
+def cmd_job_text(job_id, pretty=False, raw=False):
+    """작업의 최종 텍스트 결과만 추출 (이벤트 스트림 없이)."""
+    result, error = get_job_result(job_id)
+    if error:
+        err(error)
+
+    text = result.get("result") if result else None
+    if text is None:
+        # result 없으면 .out 에서 text 이벤트를 합산
+        out_file = LOGS_DIR / f"job_{job_id}.out"
+        if out_file.exists():
+            parts = []
+            try:
+                with open(out_file, "r") as f:
+                    for raw_line in f:
+                        if '"type":"assistant"' not in raw_line:
+                            continue
+                        try:
+                            evt = json.loads(raw_line)
+                            if evt.get("type") == "assistant":
+                                content = evt.get("message", {}).get("content", [])
+                                for c in content:
+                                    if c.get("type") == "text" and c.get("text"):
+                                        parts.append(c["text"])
+                        except json.JSONDecodeError:
+                            continue
+            except OSError:
+                pass
+            text = "\n".join(parts) if parts else None
+
+    if raw:
+        # --raw: JSON 래핑 없이 텍스트만 stdout에 출력
+        print(text or "")
+        return
+
+    out({
+        "job_id": job_id,
+        "status": result.get("status") if result else "unknown",
+        "text": text,
+        "cost_usd": result.get("cost_usd") if result else None,
+        "session_id": result.get("session_id") if result else None,
+    }, pretty)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -771,11 +1072,12 @@ def build_parser():
     p_job = sub.add_parser("job", parents=[common], help="단일 작업 조작")
     p_job.add_argument("job_id", help="작업 ID")
     p_job.add_argument("action", nargs="?",
-                       choices=["stream", "checkpoints", "rewind", "delete"],
-                       help="수행할 작업 (생략 시 결과 조회)")
+                       choices=["stream", "checkpoints", "rewind", "delete", "text"],
+                       help="수행할 작업 (생략 시 결과 조회, text: 최종 텍스트만)")
     p_job.add_argument("--offset", type=int, default=0, help="스트림 오프셋 (stream용)")
     p_job.add_argument("--checkpoint", help="체크포인트 해시 (rewind용)")
     p_job.add_argument("--prompt", dest="prompt", help="리와인드 프롬프트 (rewind용)")
+    p_job.add_argument("--raw", action="store_true", help="텍스트만 출력 (text 액션용, JSON 래핑 없이)")
 
     # ── sessions ──
     p_sessions = sub.add_parser("sessions", parents=[common], help="세션 목록 조회")
@@ -815,10 +1117,26 @@ def build_parser():
     p_proj.add_argument("--desc", help="프로젝트 설명")
     p_proj.add_argument("--no-git", action="store_true", help="git init 건너뛰기 (create용)")
 
+    # ── summary (AI 컨텍스트) ──
+    sub.add_parser("summary", parents=[common], help="서비스 + 작업 + 파이프라인 전체 요약 (AI용)")
+
+    # ── stats ──
+    p_stats = sub.add_parser("stats", parents=[common], help="작업 통계 집계")
+    p_stats.add_argument("--limit", "-n", type=int, help="최근 N개 작업만 집계")
+
+    # ── health ──
+    sub.add_parser("health", parents=[common], help="서비스 헬스체크 + 디스크 + stuck 작업")
+
+    # ── watchdog ──
+    p_wd = sub.add_parser("watchdog", parents=[common], help="프로세스 워치독 관리")
+    p_wd.add_argument("action", nargs="?",
+                       choices=["start", "stop", "status", "install", "uninstall"],
+                       help="수행할 작업 (생략 시 status)")
+
     # ── pipeline ──
     p_pipe = sub.add_parser("pipeline", parents=[common], help="파이프라인 관리/실행")
     p_pipe.add_argument("action", nargs="?",
-                        choices=["list", "create", "status", "run", "tick", "tick-all", "reset", "delete"],
+                        choices=["list", "create", "status", "run", "tick", "tick-all", "reset", "delete", "evolution"],
                         help="수행할 작업 (생략 시 목록)")
     p_pipe.add_argument("path", nargs="?", help="프로젝트 경로 (하위 호환)")
     p_pipe.add_argument("--project", "-p", help="프로젝트 이름 또는 ID (create용)")
@@ -849,6 +1167,10 @@ DISPATCH = {
     "upload": cmd_upload,
     "project": cmd_project,
     "pipeline": cmd_pipeline,
+    "summary": cmd_summary,
+    "stats": cmd_stats,
+    "health": cmd_health,
+    "watchdog": cmd_watchdog,
 }
 
 

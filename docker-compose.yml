@@ -1,0 +1,39 @@
+# ============================================================
+# Claude Controller — Docker Compose
+# 사용법: docker compose up -d
+# ============================================================
+
+services:
+  controller:
+    build: .
+    container_name: claude-controller
+    restart: unless-stopped
+    ports:
+      - "8420:8420"
+    volumes:
+      # 상태 데이터 영속화 — 컨테이너 재시작 시에도 유지
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./queue:/app/queue
+      - ./sessions:/app/sessions
+      - ./uploads:/app/uploads
+      - ./worktrees:/app/worktrees
+      # SSL 인증서 (선택)
+      - ./certs:/app/certs
+    environment:
+      # 필수: Anthropic API 키 (docker compose up 전에 설정)
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # 선택: 포트 변경
+      - PORT=8420
+      # 선택: 인증 활성화
+      - AUTH_REQUIRED=${AUTH_REQUIRED:-false}
+      # 선택: 모델 지정
+      - DEFAULT_MODEL=${DEFAULT_MODEL:-}
+      # 선택: 최대 동시 작업 수
+      - MAX_BACKGROUND_JOBS=${MAX_BACKGROUND_JOBS:-10}
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8420/api/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3

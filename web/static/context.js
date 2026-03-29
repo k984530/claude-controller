@@ -24,19 +24,29 @@ function _updateContextUI() {
   const promptInfo = document.getElementById('promptSessionInfo');
 
   [newBtn, resumeBtn, forkBtn].forEach(b => b.classList.remove('active'));
+  label.classList.remove('visible');
+  label.textContent = '';
+
   if (_contextMode === 'new') {
     newBtn.classList.add('active');
-    label.textContent = '';
-    if (promptInfo) promptInfo.textContent = 'new session';
+    if (promptInfo) promptInfo.textContent = '';
   } else if (_contextMode === 'resume') {
     resumeBtn.classList.add('active');
     const sid = _contextSessionId ? _contextSessionId.slice(0, 8) : '';
-    label.textContent = sid ? `resume:${sid}…` : '';
+    if (sid) {
+      const promptSnippet = _contextSessionPrompt ? _contextSessionPrompt.slice(0, 24) : '';
+      label.textContent = promptSnippet ? `${sid}… ${promptSnippet}` : `${sid}…`;
+      label.classList.add('visible');
+    }
     if (promptInfo) promptInfo.textContent = sid ? `resume:${sid}` : 'resume';
   } else if (_contextMode === 'fork') {
     forkBtn.classList.add('active');
     const sid = _contextSessionId ? _contextSessionId.slice(0, 8) : '';
-    label.textContent = sid ? `fork:${sid}…` : '';
+    if (sid) {
+      const promptSnippet = _contextSessionPrompt ? _contextSessionPrompt.slice(0, 24) : '';
+      label.textContent = promptSnippet ? `${sid}… ${promptSnippet}` : `${sid}…`;
+      label.classList.add('visible');
+    }
     if (promptInfo) promptInfo.textContent = sid ? `fork:${sid}` : 'fork';
   }
 }

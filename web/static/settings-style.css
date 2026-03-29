@@ -1,5 +1,35 @@
 /* ── Settings & Overlays ── */
 
+/* ── Theme Toggle FAB ── */
+.theme-fab {
+  position: fixed;
+  bottom: 80px;
+  right: 24px;
+  z-index: 300;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  transition: all var(--transition);
+}
+.theme-fab:hover {
+  background: var(--surface-hover);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+/* dark mode: show sun icon, hide moon */
+.theme-icon-light { display: none; }
+.theme-icon-dark { display: block; }
+[data-theme="light"] .theme-icon-light { display: block; }
+[data-theme="light"] .theme-icon-dark { display: none; }
+
 /* ── Settings Panel ── */
 .settings-fab {
   position: fixed;
@@ -210,11 +240,11 @@
 
 .job-preview {
   padding: 6px 14px;
-  background: var(--bg);
+  background: var(--stream-bg, #080a0e);
   font-family: var(--font-mono);
   font-size: 0.78rem;
   line-height: 1.7;
-  color: var(--text-muted);
+  color: var(--text);
   max-height: calc(0.78rem * 1.7 * 2 + 6px + 6px);
   overflow: hidden;
   box-sizing: content-box;
@@ -226,6 +256,7 @@
 .preview-line {
   padding: 2px 0;
   word-break: break-word;
+  color: var(--text);
 }
 .preview-line + .preview-line {
   margin-top: 1px;
@@ -255,6 +286,6 @@
   font-weight: 700;
 }
 .preview-text {
-  color: var(--text-muted);
+  color: var(--text);
 }
 
