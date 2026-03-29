@@ -7,7 +7,34 @@ import os
 import re
 from pathlib import Path
 
-from config import PID_FILE, CLAUDE_PROJECTS_DIR
+import time
+
+from config import PID_FILE
+
+_id_counter = 0
+
+
+def generate_id(prefix: str = "") -> str:
+    """고유 ID를 생성한다. prefix가 있으면 '{prefix}-' 형태로 붙는다."""
+    global _id_counter
+    _id_counter += 1
+    base = f"{int(time.time())}-{os.getpid() % 10000}-{_id_counter}"
+    return f"{prefix}-{base}" if prefix else base
+
+
+def atomic_json_save(filepath: Path, data, ensure_dir: bool = True):
+    """원자적 JSON 파일 쓰기: tmp 파일에 쓴 뒤 rename으로 교체.
+
+    Args:
+        filepath: 저장할 파일 경로
+        data: JSON 직렬화 가능한 데이터
+        ensure_dir: True이면 부모 디렉토리를 자동 생성
+    """
+    if ensure_dir:
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+    tmp = filepath.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), "utf-8")
+    os.replace(str(tmp), str(filepath))
 
 
 def parse_meta_file(filepath):

@@ -14,20 +14,12 @@ from pathlib import Path
 
 CONTROLLER_DIR = Path(__file__).resolve().parent.parent
 SERVICE_SCRIPT = CONTROLLER_DIR / "service" / "controller.sh"
-PID_FILE = CONTROLLER_DIR / "service" / "controller.pid"
 LOGS_DIR = CONTROLLER_DIR / "logs"
 PORT = int(os.environ.get("PORT", 8420))
 
-
-def is_service_running():
-    if not PID_FILE.exists():
-        return False, None
-    try:
-        pid = int(PID_FILE.read_text().strip())
-        os.kill(pid, 0)
-        return True, pid
-    except (ValueError, ProcessLookupError, PermissionError, OSError):
-        return False, None
+# web/ 모듈 경로 추가 (utils.is_service_running 재사용)
+sys.path.insert(0, str(CONTROLLER_DIR / "web"))
+from utils import is_service_running
 
 
 def main():
@@ -47,9 +39,6 @@ def main():
             ok, pid = is_service_running()
             if ok:
                 break
-
-    # 웹 모듈 임포트
-    sys.path.insert(0, str(CONTROLLER_DIR / "web"))
     from server import ControllerHandler
     from config import SSL_CERT, SSL_KEY, PUBLIC_URL
     from auth import generate_token

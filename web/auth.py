@@ -8,7 +8,6 @@ CSRF, DNS Rebinding 등 원격 공격을 차단한다.
 """
 
 import secrets
-from pathlib import Path
 
 from config import DATA_DIR
 

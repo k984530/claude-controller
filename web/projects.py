@@ -10,10 +10,9 @@ import json
 import os
 import subprocess
 import time
-from pathlib import Path
 
 from config import DATA_DIR, LOGS_DIR
-from utils import parse_meta_file
+from utils import parse_meta_file, generate_id
 
 PROJECTS_FILE = DATA_DIR / "projects.json"
 
@@ -29,15 +28,13 @@ def _load_projects() -> list[dict]:
 
 
 def _save_projects(projects: list[dict]):
-    """프로젝트 목록을 파일에 저장한다."""
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    PROJECTS_FILE.write_text(
-        json.dumps(projects, ensure_ascii=False, indent=2), "utf-8"
-    )
+    """프로젝트 목록을 파일에 원자적으로 저장한다."""
+    from utils import atomic_json_save
+    atomic_json_save(PROJECTS_FILE, projects)
 
 
 def _generate_id() -> str:
-    return f"{int(time.time())}-{os.getpid()}-{id(time) % 10000}"
+    return generate_id("proj")
 
 
 def _collect_job_stats_by_cwd() -> dict:

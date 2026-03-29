@@ -9,7 +9,6 @@ bash(lib/jobs.sh)에서 직접 호출 가능:
 import hashlib
 import hmac
 import json
-import os
 import sys
 import time
 import urllib.request
