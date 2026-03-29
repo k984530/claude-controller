@@ -52,7 +52,6 @@ class FsHandlerMixin:
             "skip_permissions", "allowed_tools", "model", "max_jobs",
             "append_system_prompt", "target_repo", "base_branch",
             "checkpoint_interval", "locale",
-            "webhook_url", "webhook_secret", "webhook_events",
         }
         for k, v in body.items():
             if k in allowed_keys:

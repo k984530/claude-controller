@@ -220,7 +220,7 @@ class JobHandlerMixin:
                                 "session_id": evt.get("session_id", "")
                             }
                             if result_evt["is_error"]:
-                                from jobs import classify_error
+                                from error_classify import classify_error
                                 result_evt["user_error"] = classify_error(evt.get("result", ""))
                             events.append(result_evt)
                     except json.JSONDecodeError:
