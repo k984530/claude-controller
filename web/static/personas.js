@@ -14,6 +14,9 @@ const _PERSONA_ICONS = {
   shield:       '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
   cloud:        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>',
   database:     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>',
+  eye:          '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+  layers:       '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>',
+  'file-text':  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>',
   user:         '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
 };
 
@@ -22,7 +25,12 @@ async function fetchPersonas() {
     _personas = await apiFetch('/api/personas');
     renderPersonaCards();
     _updatePersonaPicker();
-  } catch { /* silent */ }
+  } catch (err) {
+    const container = document.getElementById('personaGrid');
+    if (container) {
+      container.innerHTML = '<div class="empty-state" style="padding:20px;text-align:center;color:var(--text-muted);font-size:0.8rem;">페르소나를 불러올 수 없습니다. 서버를 확인하세요.</div>';
+    }
+  }
 }
 
 function renderPersonaCards() {
@@ -52,6 +60,7 @@ function renderPersonaCards() {
       <div class="persona-card-actions">
         <button class="btn btn-sm btn-primary" onclick="selectPersonaForSend('${escapeHtml(p.id)}')" title="이 페르소나로 작업 전송">배정</button>
         <button class="btn btn-sm" onclick="openPersonaDetail('${escapeHtml(p.id)}')" title="상세 보기">상세</button>
+        ${!p.builtin ? `<button class="btn btn-sm" onclick="openEditPersonaDialog('${escapeHtml(p.id)}')">수정</button>` : ''}
         ${!p.builtin ? `<button class="btn btn-sm btn-danger" onclick="deletePersona('${escapeHtml(p.id)}')">삭제</button>` : ''}
       </div>
     </div>`;
@@ -87,7 +96,8 @@ function _updatePersonaPicker() {
     const p = _personas.find(x => x.id === _selectedPersona);
     if (p) {
       const icon = _PERSONA_ICONS[p.icon] || _PERSONA_ICONS.user;
-      badge.innerHTML = `<span class="persona-active-badge" style="--persona-color:${escapeHtml(p.color)}" onclick="clearPersonaSelection()" title="${escapeHtml(p.name)} (클릭하여 해제)">${icon} ${escapeHtml(p.name)}</span>`;
+      const desc = p.description ? ` — ${p.description}` : '';
+      badge.innerHTML = `<span class="persona-active-badge" style="--persona-color:${escapeHtml(p.color)}" onclick="clearPersonaSelection()" title="${escapeHtml(p.name + desc)}\n\n클릭하여 해제">${icon} ${escapeHtml(p.name)}</span>`;
       badge.style.display = '';
       return;
     }
@@ -148,8 +158,11 @@ function openCreatePersonaDialog() {
   overlay.style.cssText = 'display:flex;align-items:center;justify-content:center;';
   overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
 
-  const roleOptions = ['custom','planner','developer','designer','qa','security','devops','data']
+  const roleOptions = ['custom','planner','developer','designer','qa','security','devops','data','reviewer','architect','writer']
     .map(r => `<option value="${r}">${r}</option>`).join('');
+
+  const iconOptions = Object.keys(_PERSONA_ICONS)
+    .map(k => `<option value="${k}">${k}</option>`).join('');
 
   overlay.innerHTML = `<div class="settings-panel" style="max-width:520px;margin:0;">
     <div class="settings-header">
@@ -166,9 +179,19 @@ function openCreatePersonaDialog() {
         <label class="persona-dlg-label">이름 *</label>
         <input id="${dlgId}_name" type="text" class="persona-dlg-input" placeholder="예: 코드 아키텍트">
       </div>
-      <div style="margin-bottom:10px;">
-        <label class="persona-dlg-label">역할</label>
-        <select id="${dlgId}_role" class="persona-dlg-input">${roleOptions}</select>
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <div style="flex:1;">
+          <label class="persona-dlg-label">역할</label>
+          <select id="${dlgId}_role" class="persona-dlg-input">${roleOptions}</select>
+        </div>
+        <div style="flex:1;">
+          <label class="persona-dlg-label">아이콘</label>
+          <select id="${dlgId}_icon" class="persona-dlg-input">${iconOptions}</select>
+        </div>
+        <div style="width:60px;">
+          <label class="persona-dlg-label">색상</label>
+          <input id="${dlgId}_color" type="color" class="persona-dlg-input" value="#6366f1" style="height:32px;padding:2px;">
+        </div>
       </div>
       <div style="margin-bottom:10px;">
         <label class="persona-dlg-label">설명</label>
@@ -190,6 +213,8 @@ function openCreatePersonaDialog() {
 async function _doCreatePersona(dlgId, btn) {
   const name = document.getElementById(dlgId + '_name').value.trim();
   const role = document.getElementById(dlgId + '_role').value;
+  const icon = document.getElementById(dlgId + '_icon').value;
+  const color = document.getElementById(dlgId + '_color').value;
   const desc = document.getElementById(dlgId + '_desc').value.trim();
   const prompt = document.getElementById(dlgId + '_prompt').value.trim();
 
@@ -201,7 +226,7 @@ async function _doCreatePersona(dlgId, btn) {
   try {
     await apiFetch('/api/personas', {
       method: 'POST',
-      body: JSON.stringify({ name, role, description: desc, system_prompt: prompt }),
+      body: JSON.stringify({ name, role, icon, color, description: desc, system_prompt: prompt }),
     });
     showToast(`페르소나 "${name}" 생성됨`);
     btn.closest('.settings-overlay').remove();
@@ -210,6 +235,108 @@ async function _doCreatePersona(dlgId, btn) {
     showToast(`생성 실패: ${err.message}`, 'error');
     btn.disabled = false;
     btn.textContent = '생성';
+  }
+}
+
+/* ── 수정 다이얼로그 ── */
+
+async function openEditPersonaDialog(personaId) {
+  let persona;
+  try {
+    persona = await apiFetch(`/api/personas/${encodeURIComponent(personaId)}`);
+  } catch (err) {
+    showToast(err.message, 'error');
+    return;
+  }
+
+  if (persona.builtin) {
+    showToast('내장 페르소나는 수정할 수 없습니다', 'error');
+    return;
+  }
+
+  const dlgId = 'personaEdit_' + Date.now();
+  const overlay = document.createElement('div');
+  overlay.className = 'settings-overlay';
+  overlay.style.cssText = 'display:flex;align-items:center;justify-content:center;';
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+  const roleOptions = ['custom','planner','developer','designer','qa','security','devops','data','reviewer','architect','writer']
+    .map(r => `<option value="${r}" ${r === persona.role ? 'selected' : ''}>${r}</option>`).join('');
+
+  const iconOptions = Object.keys(_PERSONA_ICONS)
+    .map(k => `<option value="${k}" ${k === persona.icon ? 'selected' : ''}>${k}</option>`).join('');
+
+  overlay.innerHTML = `<div class="settings-panel" style="max-width:520px;margin:0;">
+    <div class="settings-header">
+      <div class="settings-title" style="display:flex;align-items:center;gap:8px;">
+        <span style="color:${escapeHtml(persona.color)}">${_PERSONA_ICONS[persona.icon] || _PERSONA_ICONS.user}</span>
+        <span>페르소나 수정</span>
+      </div>
+      <button class="settings-close" onclick="this.closest('.settings-overlay').remove()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="settings-body">
+      <div style="margin-bottom:10px;">
+        <label class="persona-dlg-label">이름 *</label>
+        <input id="${dlgId}_name" type="text" class="persona-dlg-input" value="${escapeHtml(persona.name)}">
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <div style="flex:1;">
+          <label class="persona-dlg-label">역할</label>
+          <select id="${dlgId}_role" class="persona-dlg-input">${roleOptions}</select>
+        </div>
+        <div style="flex:1;">
+          <label class="persona-dlg-label">아이콘</label>
+          <select id="${dlgId}_icon" class="persona-dlg-input">${iconOptions}</select>
+        </div>
+        <div style="width:60px;">
+          <label class="persona-dlg-label">색상</label>
+          <input id="${dlgId}_color" type="color" class="persona-dlg-input" value="${escapeHtml(persona.color)}" style="height:32px;padding:2px;">
+        </div>
+      </div>
+      <div style="margin-bottom:10px;">
+        <label class="persona-dlg-label">설명</label>
+        <input id="${dlgId}_desc" type="text" class="persona-dlg-input" value="${escapeHtml(persona.description || '')}">
+      </div>
+      <div style="margin-bottom:10px;">
+        <label class="persona-dlg-label">시스템 프롬프트 *</label>
+        <textarea id="${dlgId}_prompt" class="persona-dlg-input" rows="10">${escapeHtml(persona.system_prompt || '')}</textarea>
+      </div>
+    </div>
+    <div class="settings-footer" style="display:flex;gap:6px;">
+      <button class="btn btn-sm btn-primary" onclick="_doUpdatePersona('${escapeHtml(personaId)}','${dlgId}',this)">저장</button>
+      <button class="btn btn-sm" onclick="this.closest('.settings-overlay').remove()">취소</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+
+async function _doUpdatePersona(personaId, dlgId, btn) {
+  const name = document.getElementById(dlgId + '_name').value.trim();
+  const role = document.getElementById(dlgId + '_role').value;
+  const icon = document.getElementById(dlgId + '_icon').value;
+  const color = document.getElementById(dlgId + '_color').value;
+  const desc = document.getElementById(dlgId + '_desc').value.trim();
+  const prompt = document.getElementById(dlgId + '_prompt').value.trim();
+
+  if (!name) { showToast('이름을 입력하세요', 'error'); return; }
+  if (!prompt) { showToast('시스템 프롬프트를 입력하세요', 'error'); return; }
+
+  btn.disabled = true;
+  btn.textContent = '저장 중...';
+  try {
+    await apiFetch(`/api/personas/${encodeURIComponent(personaId)}/update`, {
+      method: 'POST',
+      body: JSON.stringify({ name, role, icon, color, description: desc, system_prompt: prompt }),
+    });
+    showToast(`페르소나 "${name}" 수정됨`);
+    btn.closest('.settings-overlay').remove();
+    fetchPersonas();
+  } catch (err) {
+    showToast(`수정 실패: ${err.message}`, 'error');
+    btn.disabled = false;
+    btn.textContent = '저장';
   }
 }
 

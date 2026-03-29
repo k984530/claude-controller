@@ -10,16 +10,16 @@ let _jobSearchQuery = '';
 let _allJobs = [];
 let _registeredProjects = [];
 let _jobListCollapsed = localStorage.getItem('jobListCollapsed') === '1';
-let _jobViewMode = localStorage.getItem('jobViewMode') || 'flat';
-let _jobViewModeManual = localStorage.getItem('jobViewModeManual') === '1'; // 사용자가 수동 전환한 적 있는지
 let _collapsedGroups = JSON.parse(localStorage.getItem('collapsedGroups') || '{}');
 let _statsPeriod = 'all';
 let _selectedProject = null;
 let _selectedProjectInfo = null;
 let _jobPage = 1;
-let _jobLimit = 10;
+let _jobLimit = 50;
 let _jobPages = 1;
 let _jobTotal = 0;
+const _GROUP_PAGE_SIZE = 5;
+let _groupPages = {};  // { groupName: currentPage(1-based) }
 
 /* ── Stats ── */
 
@@ -107,6 +107,7 @@ function setJobFilter(status) {
 
 function applyJobFilters() {
   _jobSearchQuery = (document.getElementById('jobSearchInput')?.value || '').toLowerCase().trim();
+  _forceFullRender = true;
   renderJobs(_allJobs);
 }
 
@@ -132,262 +133,35 @@ function setJobProjectFilter(project) {
   applyJobFilters();
 }
 
-function _extractProjects(jobs) {
-  const map = {};
+// 프로젝트 관련 함수 → job-projects.js로 분리됨
 
-  // 1) 등록된 프로젝트를 먼저 삽입 (이름·경로 우��� 사용)
-  for (const rp of _registeredProjects) {
-    const name = rp.name || formatCwd(rp.path);
-    const js = rp.job_stats || {};
-    map[name] = {
-      name,
-      cwd: rp.path,
-      projectId: rp.id,
-      registered: true,
-      count: js.total || 0,
-      running: js.running || 0,
-    };
-  }
-
-  // 2) job cwd에서 추출한 프로젝트 병합 — 등록 프로젝트와 경로가 같으면 통합
-  for (const job of jobs) {
-    const cwdName = formatCwd(job.cwd);
-    if (!cwdName || cwdName === '-') continue;
-
-    // 등록 프로젝트 중 같은 경로인지 확인
-    const matchKey = Object.keys(map).find(k => {
-      const mp = map[k];
-      return mp.cwd && job.cwd && _normPath(mp.cwd) === _normPath(job.cwd);
-    });
-
-    if (matchKey) {
-      // 등록 프로젝트와 매칭 — job 단위 카운트는 이미 job_stats에 있으므로 skip
-      continue;
-    }
-
-    // 등록되지 않은 ad-hoc 프로젝트
-    if (!map[cwdName]) map[cwdName] = { name: cwdName, cwd: job.cwd, count: 0, running: 0, registered: false };
-    map[cwdName].count++;
-    if (job.status === 'running') map[cwdName].running++;
-  }
-
-  // 등록 프로젝트 우선, 그 안에서 count 역순
-  return Object.values(map).sort((a, b) => {
-    if (a.registered !== b.registered) return a.registered ? -1 : 1;
-    return b.count - a.count;
-  });
-}
-
-function _normPath(p) {
-  if (!p) return '';
-  return p.replace(/\/+$/, '');
-}
-
-function _updateProjectDropdown(jobs) {
-  const sel = document.getElementById('jobProjectSelect');
-  if (!sel) return;
-  const projects = _extractProjects(jobs);
-  const prev = sel.value;
-  sel.innerHTML = `<option value="all">${t('all_projects')} (${jobs.length})</option>`;
-  for (const p of projects) {
-    const label = p.name + ` (${p.count})`;
-    sel.innerHTML += `<option value="${escapeHtml(p.name)}">${escapeHtml(label)}</option>`;
-  }
-  sel.value = (prev && projects.some(p => p.name === prev)) ? prev : 'all';
-  _jobFilterProject = sel.value;
-}
-
-function _renderProjectStrip(jobs) {
-  const container = document.getElementById('projectStrip');
-  if (!container) return;
-  if (_jobListCollapsed) { container.style.display = 'none'; return; }
-
-  const projects = _extractProjects(jobs);
-  const dropdown = document.querySelector('.job-project-filter');
-
-  // 등록 프로젝트가 있으면 항상 스트립 표시
-  const hasRegistered = _registeredProjects.length > 0;
-  if (projects.length <= 1 && !hasRegistered) {
-    container.style.display = 'none';
-    if (dropdown) dropdown.style.display = projects.length > 0 ? 'flex' : 'none';
-    return;
-  }
-  container.style.display = '';
-  if (dropdown) dropdown.style.display = 'none';
-
-  // 프로젝트별 상태 카운트 (job 데이터에서 실시간 집계)
-  const sc = {};
-  for (const job of jobs) {
-    const name = _resolveProjectName(job.cwd);
-    if (!sc[name]) sc[name] = { running: 0, done: 0, failed: 0 };
-    const s = job.status;
-    if (s === 'running') sc[name].running++;
-    else if (s === 'done') sc[name].done++;
-    else if (s === 'failed') sc[name].failed++;
-  }
-
-  let html = `<button class="project-chip${_jobFilterProject === 'all' ? ' active' : ''}" onclick="setJobProjectFilter('all')">
-    <svg class="pchip-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-    <span class="pchip-name">${t('all_projects')}</span>
-    <span class="pchip-count">${jobs.length}</span>
-  </button>`;
-
-  for (const p of projects) {
-    const active = _jobFilterProject === p.name ? ' active' : '';
-    const dot = p.running > 0 ? '<span class="pchip-dot"></span>' : '';
-    const s = sc[p.name] || {};
-    let stats = '';
-    if (s.running > 0) stats += `<span class="pchip-stat pchip-stat-running">${s.running}</span>`;
-    if (s.done > 0) stats += `<span class="pchip-stat pchip-stat-done">${s.done}</span>`;
-    if (s.failed > 0) stats += `<span class="pchip-stat pchip-stat-failed">${s.failed}</span>`;
-
-    const regBadge = p.registered ? '<span class="pchip-reg"></span>' : '';
-
-    html += `<button class="project-chip${active}${p.registered ? ' registered' : ''}" onclick="setJobProjectFilter('${escapeHtml(escapeJsStr(p.name))}')" title="${escapeHtml(p.cwd)}">
-      ${dot}${regBadge}
-      <svg class="pchip-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-      <span class="pchip-name">${escapeHtml(p.name)}</span>
-      <span class="pchip-count">${p.count}</span>
-      ${stats}
-    </button>`;
-  }
-
-  container.innerHTML = html;
-}
-
-/** job의 cwd를 등록 프로젝트 이름으로 resolve한다. 매칭 실패 시 formatCwd 사용. */
-function _resolveProjectName(cwd) {
-  if (!cwd) return '-';
-  const norm = _normPath(cwd);
-  for (const rp of _registeredProjects) {
-    if (_normPath(rp.path) === norm) return rp.name || formatCwd(rp.path);
-  }
-  return formatCwd(cwd);
-}
-
-/* ── Project Detail Panel ── */
-
-async function _fetchProjectInfo(projectId) {
-  try {
-    const data = await apiFetch(`/api/projects/${projectId}`);
-    _selectedProjectInfo = data;
-    _showProjectDetail();
-  } catch { /* silent */ }
-}
-
-function _showProjectDetail() {
-  const container = document.getElementById('projectDetail');
-  if (!container || !_selectedProject) { _hideProjectDetail(); return; }
-
-  const projectJobs = _allJobs.filter(j => _resolveProjectName(j.cwd) === _selectedProject.name);
-
-  let running = 0, done = 0, failed = 0, totalDuration = 0, durCount = 0;
-  for (const j of projectJobs) {
-    if (j.status === 'running') running++;
-    else if (j.status === 'done') done++;
-    else if (j.status === 'failed') failed++;
-    if (j.duration_ms != null) { totalDuration += j.duration_ms; durCount++; }
-  }
-
-  const completed = done + failed;
-  const successRate = completed > 0 ? Math.round((done / completed) * 100) : null;
-  const avgDuration = durCount > 0 ? totalDuration / durCount / 1000 : null;
-
-  const info = _selectedProjectInfo;
-  const metaItems = [];
-  if (_selectedProject.cwd) metaItems.push(`<span class="pd-path-text">${escapeHtml(_selectedProject.cwd)}</span>`);
-  if (info?.branch) metaItems.push(`<span class="pd-branch">${escapeHtml(info.branch)}</span>`);
-  if (info?.remote) {
-    const remote = info.remote.replace(/\.git$/, '').replace(/^https?:\/\//, '').replace(/^git@([^:]+):/, '$1/');
-    metaItems.push(`<span class="pd-remote" title="${escapeHtml(info.remote)}">${escapeHtml(remote)}</span>`);
-  }
-
-  let statsHtml = `<div class="pd-stat"><div class="pd-stat-val">${projectJobs.length}</div><div class="pd-stat-label">${escapeHtml(t('pd_total'))}</div></div>`;
-  if (running > 0) statsHtml += `<div class="pd-stat pd-running"><div class="pd-stat-val">${running}</div><div class="pd-stat-label">${escapeHtml(t('pd_running'))}</div></div>`;
-  statsHtml += `<div class="pd-stat pd-done"><div class="pd-stat-val">${done}</div><div class="pd-stat-label">${escapeHtml(t('pd_done'))}</div></div>`;
-  if (failed > 0) statsHtml += `<div class="pd-stat pd-failed"><div class="pd-stat-val">${failed}</div><div class="pd-stat-label">${escapeHtml(t('pd_failed'))}</div></div>`;
-  if (avgDuration != null) {
-    const durStr = avgDuration < 60 ? `${avgDuration.toFixed(1)}s` : `${(avgDuration / 60).toFixed(1)}m`;
-    statsHtml += `<div class="pd-stat"><div class="pd-stat-val">${durStr}</div><div class="pd-stat-label">${escapeHtml(t('pd_avg'))}</div></div>`;
-  }
-  if (successRate != null) {
-    const rateClass = successRate >= 80 ? 'pd-rate-ok' : 'pd-rate-warn';
-    statsHtml += `<div class="pd-stat ${rateClass}"><div class="pd-stat-val">${successRate}%</div><div class="pd-stat-label">${escapeHtml(t('pd_success_rate'))}</div></div>`;
-  }
-
-  const regBadge = _selectedProject.registered ? `<span class="pd-badge">${escapeHtml(t('pd_registered'))}</span>` : '';
-  const cwdAttr = escapeHtml(escapeJsStr(_selectedProject.cwd || ''));
-
-  container.innerHTML = `
-    <div class="pd-header">
-      <div class="pd-title-row">
-        <svg class="pd-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-        <span class="pd-name">${escapeHtml(_selectedProject.name)}</span>
-        ${regBadge}
-        <div class="pd-actions">
-          <button class="btn btn-sm btn-primary" onclick="sendTaskToProject('${cwdAttr}')" title="${escapeHtml(t('pd_send_task_title'))}">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-            ${escapeHtml(t('pd_send_task'))}
-          </button>
-          <button class="pd-close" onclick="setJobProjectFilter('all')" title="${escapeHtml(t('pd_show_all_title'))}">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-        </div>
-      </div>
-      ${metaItems.length ? `<div class="pd-meta">${metaItems.join(' <span class="pd-sep">\u00b7</span> ')}</div>` : ''}
-    </div>
-    <div class="pd-stats">${statsHtml}</div>
-  `;
-  container.style.display = '';
-}
-
-function _hideProjectDetail() {
-  const container = document.getElementById('projectDetail');
-  if (container) { container.style.display = 'none'; container.innerHTML = ''; }
-}
-
-function sendTaskToProject(cwd) {
-  if (cwd) {
-    addRecentDir(cwd);
-    selectRecentDir(cwd, true);
-  }
-  document.getElementById('promptInput')?.focus();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
 
 /* ── Grouped View ── */
 
 function toggleJobViewMode() {
-  _jobViewMode = _jobViewMode === 'flat' ? 'grouped' : 'flat';
-  _jobViewModeManual = true;
-  localStorage.setItem('jobViewMode', _jobViewMode);
-  localStorage.setItem('jobViewModeManual', '1');
+  _forceFullRender = true;
   renderJobs(_allJobs);
 }
 
 /** 프로젝트별 통계 계산 — duration, success rate */
-function _calcProjectStats(jobs) {
-  const stats = {};
-  for (const job of jobs) {
-    const name = _resolveProjectName(job.cwd);
-    const key = (name && name !== '-') ? name : t('pd_other');
-    if (!stats[key]) stats[key] = { duration: 0, done: 0, failed: 0, durCount: 0 };
-    const s = stats[key];
-    if (job.duration_ms != null) { s.duration += job.duration_ms; s.durCount++; }
-    if (job.status === 'done') s.done++;
-    if (job.status === 'failed') s.failed++;
-  }
-  return stats;
-}
+// _calcProjectStats → job-projects.js로 분리됨
+
 
 function _updateViewModeUI() {
   const btn = document.getElementById('btnViewMode');
-  if (btn) btn.classList.toggle('active', _jobViewMode === 'grouped');
+  if (btn) btn.classList.add('active');
 }
 
 function toggleGroupCollapse(groupName) {
   _collapsedGroups[groupName] = !_collapsedGroups[groupName];
   localStorage.setItem('collapsedGroups', JSON.stringify(_collapsedGroups));
+  _forceFullRender = true;
+  renderJobs(_allJobs);
+}
+
+function goGroupPage(groupName, page) {
+  _groupPages[groupName] = Math.max(1, page);
+  _forceFullRender = true;
   renderJobs(_allJobs);
 }
 
@@ -483,7 +257,15 @@ function _renderGroupedView(jobs, tbody) {
 
     if (collapsed) continue;
 
-    for (const job of group.jobs) {
+    // 그룹별 페이지네이션: 5개씩
+    const gTotal = group.jobs.length;
+    const gPages = Math.ceil(gTotal / _GROUP_PAGE_SIZE);
+    const gPage = Math.min(_groupPages[group.name] || 1, gPages);
+    const gStart = (gPage - 1) * _GROUP_PAGE_SIZE;
+    const gEnd = Math.min(gStart + _GROUP_PAGE_SIZE, gTotal);
+    const pageJobs = group.jobs.slice(gStart, gEnd);
+
+    for (const job of pageJobs) {
       const id = job.id || job.job_id || '-';
       const isExpanded = expandedJobId === id;
       if (streamState[id]) streamState[id].jobData = job;
@@ -526,6 +308,20 @@ function _renderGroupedView(jobs, tbody) {
         tbody.appendChild(pvTr);
         updateJobPreview(id);
       }
+    }
+
+    // 그룹 내 페이지네이션 (6개 이상일 때만)
+    if (gPages > 1) {
+      const pgTr = document.createElement('tr');
+      pgTr.className = 'grp-pg-row';
+      pgTr.dataset.jobId = `__grppg__${group.name}`;
+      let pgHtml = '<td colspan="6"><div class="grp-pagination">';
+      pgHtml += `<button class="pg-btn pg-btn-sm" ${gPage > 1 ? '' : 'disabled'} onclick="event.stopPropagation();goGroupPage('${escapeJsStr(group.name)}',${gPage - 1})">&lsaquo;</button>`;
+      pgHtml += `<span class="grp-pg-info">${gStart + 1}–${gEnd} / ${gTotal}</span>`;
+      pgHtml += `<button class="pg-btn pg-btn-sm" ${gPage < gPages ? '' : 'disabled'} onclick="event.stopPropagation();goGroupPage('${escapeJsStr(group.name)}',${gPage + 1})">&rsaquo;</button>`;
+      pgHtml += '</div></td>';
+      pgTr.innerHTML = pgHtml;
+      tbody.appendChild(pgTr);
     }
   }
 
@@ -833,6 +629,7 @@ function goJobPage(page) {
 function _renderJobPagination() {
   let container = document.getElementById('jobPagination');
   if (!container) return;
+  // 그룹별 페이지네이션 사용 → 글로벌 숨김
   if (_jobPages <= 1) {
     container.innerHTML = '';
     return;
@@ -870,6 +667,13 @@ function _buildPageRange(current, total) {
   return pages;
 }
 
+let _lastJobsFingerprint = '';
+let _forceFullRender = false;
+
+function _jobsFingerprint(jobs) {
+  return jobs.map(j => `${j.id||j.job_id}:${j.status}`).join('|');
+}
+
 function renderJobs(jobs) {
   _allJobs = jobs;
   _updateProjectDropdown(jobs);
@@ -884,183 +688,37 @@ function renderJobs(jobs) {
     ? isFiltered ? `(${t('job_count_filtered').replace('{filtered}', filtered.length).replace('{total}', totalCount)})` : `(${t('job_count').replace('{n}', totalCount)})`
     : '';
 
-  // 프로젝트 2개 이상 + 사용자가 수동 전환한 적 없으면 자동 grouped
-  if (!_jobViewModeManual) {
-    const projectCount = _extractProjects(jobs).length;
-    if (projectCount >= 2 && _jobViewMode !== 'grouped') {
-      _jobViewMode = 'grouped';
-      localStorage.setItem('jobViewMode', 'grouped');
-    } else if (projectCount < 2 && _jobViewMode === 'grouped') {
-      _jobViewMode = 'flat';
-      localStorage.setItem('jobViewMode', 'flat');
-    }
-  }
-
   _updateViewModeUI();
   const thead = tbody.closest('table')?.querySelector('thead');
-  if (_jobViewMode === 'grouped') {
-    if (thead) thead.style.display = 'none';
-    _renderGroupedView(filtered, tbody);
-    return;
-  }
-  if (thead) thead.style.display = '';
+  if (thead) thead.style.display = 'none';
 
-  jobs = filtered;
+  const fp = _jobsFingerprint(filtered);
 
-  if (jobs.length === 0) {
-    tbody.innerHTML = `<tr data-job-id="__empty__"><td colspan="6" class="empty-state">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:40px;height:40px;margin-bottom:12px;opacity:0.3;"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
-      <div>${t('no_jobs')}</div>
-    </td></tr>`;
+  // 1) 변화 없음 → 렌더 건너뜀
+  if (!_forceFullRender && fp === _lastJobsFingerprint) {
     return;
   }
 
-  jobs.sort((a, b) => {
-    const aRunning = a.status === 'running' ? 0 : 1;
-    const bRunning = b.status === 'running' ? 0 : 1;
-    if (aRunning !== bRunning) return aRunning - bRunning;
-    return (parseInt(b.id || b.job_id || 0)) - (parseInt(a.id || a.job_id || 0));
-  });
+  // 2) 구조 동일, 상태만 변경 → 뱃지만 교체
+  const oldIds = _lastJobsFingerprint.split('|').map(s => s.split(':')[0]).filter(Boolean);
+  const newIds = fp.split('|').map(s => s.split(':')[0]).filter(Boolean);
+  const sameStructure = !_forceFullRender
+    && oldIds.length === newIds.length
+    && oldIds.length > 0
+    && oldIds.every((id, i) => id === newIds[i]);
 
-  for (const job of jobs) {
-    const id = job.id || job.job_id || '-';
-    if (streamState[id]) {
-      streamState[id].jobData = job;
+  if (sameStructure) {
+    for (const job of filtered) {
+      updateJobRowStatus(job.id || job.job_id, job.status);
     }
+    _lastJobsFingerprint = fp;
+    return;
   }
 
-  const existingRows = {};
-  for (const row of tbody.querySelectorAll('tr[data-job-id]')) {
-    existingRows[row.dataset.jobId] = row;
-  }
-
-  const newIds = [];
-  for (const job of jobs) {
-    const id = job.id || job.job_id || '-';
-    newIds.push(id);
-    if (expandedJobId === id) newIds.push(id + '__expand');
-  }
-
-  const emptyRow = tbody.querySelector('tr[data-job-id="__empty__"]');
-  if (emptyRow) emptyRow.remove();
-
-  for (const job of jobs) {
-    const id = job.id || job.job_id || '-';
-    const isExpanded = expandedJobId === id;
-    const existing = existingRows[id];
-
-    if (existing && !existing.classList.contains('expand-row')) {
-      const cells = existing.querySelectorAll('td');
-      if (cells.length >= 6) {
-        const newStatus = statusBadgeHtml(job.status, id, job);
-        if (cells[1].innerHTML !== newStatus) cells[1].innerHTML = newStatus;
-        const newCwd = escapeHtml(formatCwd(job.cwd));
-        if (cells[3].innerHTML !== newCwd) {
-          cells[3].innerHTML = newCwd;
-          cells[3].title = job.cwd || '';
-        }
-        const newSession = job.session_id ? job.session_id.slice(0, 8) : (job.status === 'running' ? '—' : '-');
-        if (cells[4].textContent !== newSession) {
-          cells[4].textContent = newSession;
-          if (job.session_id) {
-            cells[4].className = 'job-session clickable';
-            cells[4].title = job.session_id;
-            cells[4].setAttribute('onclick', `event.stopPropagation(); resumeFromJob('${escapeJsStr(job.session_id)}', '${escapeJsStr(truncate(job.prompt, 40))}', '${escapeJsStr(job.cwd || '')}')`);
-          }
-        }
-        const newActions = jobActionsHtml(id, job.status, job.session_id, job.cwd);
-        if (cells[5].innerHTML !== newActions) {
-          cells[5].innerHTML = newActions;
-        }
-      }
-      existing.className = isExpanded ? 'expanded' : '';
-      delete existingRows[id];
-    } else if (!existing) {
-      const tr = document.createElement('tr');
-      tr.dataset.jobId = id;
-      tr.className = isExpanded ? 'expanded' : '';
-      tr.setAttribute('onclick', `toggleJobExpand('${escapeHtml(id)}')`);
-      tr.innerHTML = _buildJobRowCells(id, job);
-      tbody.appendChild(tr);
-    } else {
-      delete existingRows[id];
-    }
-
-    const expandKey = id + '__expand';
-    const existingExpand = existingRows[expandKey] || tbody.querySelector(`tr[data-job-id="${CSS.escape(expandKey)}"]`);
-
-    if (isExpanded) {
-      if (!existingExpand) {
-        const expandTr = document.createElement('tr');
-        expandTr.className = 'expand-row';
-        expandTr.dataset.jobId = expandKey;
-        expandTr.innerHTML = _buildExpandRowHtml(id, job);
-        const jobRow = tbody.querySelector(`tr[data-job-id="${CSS.escape(id)}"]`);
-        if (jobRow && jobRow.nextSibling) {
-          tbody.insertBefore(expandTr, jobRow.nextSibling);
-        } else {
-          tbody.appendChild(expandTr);
-        }
-        initStream(id, job);
-      } else {
-        delete existingRows[expandKey];
-      }
-    } else if (existingExpand) {
-      existingExpand.remove();
-      delete existingRows[expandKey];
-    }
-
-    // 실행 중인 작업: 미리보기 행
-    const previewKey = id + '__preview';
-    const existingPreview = existingRows[previewKey] || tbody.querySelector(`tr[data-job-id="${CSS.escape(previewKey)}"]`);
-
-    if (job.status === 'running' && !isExpanded) {
-      if (!streamState[id]) {
-        streamState[id] = { offset: 0, timer: null, done: false, jobData: job, events: [], renderedCount: 0 };
-      }
-      if (!streamState[id].timer) {
-        initStream(id, job);
-      }
-      if (!existingPreview) {
-        const pvTr = document.createElement('tr');
-        pvTr.className = 'preview-row';
-        pvTr.dataset.jobId = previewKey;
-        pvTr.innerHTML = `<td colspan="6"><div class="job-preview" id="jobPreview-${escapeHtml(id)}"><span class="preview-text">${escapeHtml(t('stream_preview_wait'))}</span></div></td>`;
-        const jobRow = tbody.querySelector(`tr[data-job-id="${CSS.escape(id)}"]`);
-        if (jobRow && jobRow.nextSibling) {
-          tbody.insertBefore(pvTr, jobRow.nextSibling);
-        } else {
-          tbody.appendChild(pvTr);
-        }
-        newIds.splice(newIds.indexOf(id) + 1, 0, previewKey);
-      } else {
-        delete existingRows[previewKey];
-        newIds.splice(newIds.indexOf(id) + 1, 0, previewKey);
-      }
-      updateJobPreview(id);
-    } else {
-      if (existingPreview) {
-        existingPreview.remove();
-        delete existingRows[previewKey];
-      }
-    }
-  }
-
-  for (const [key, row] of Object.entries(existingRows)) {
-    row.remove();
-  }
-
-  const currentOrder = [...tbody.querySelectorAll('tr[data-job-id]')].map(r => r.dataset.jobId);
-  if (JSON.stringify(currentOrder) !== JSON.stringify(newIds)) {
-    for (const nid of newIds) {
-      const row = tbody.querySelector(`tr[data-job-id="${CSS.escape(nid)}"]`);
-      if (row) tbody.appendChild(row);
-    }
-  }
-
-  const hasCompleted = jobs.some(j => j.status === 'done' || j.status === 'failed');
-  const deleteBtn = document.getElementById('btnDeleteCompleted');
-  deleteBtn.style.display = hasCompleted ? 'inline-flex' : 'none';
+  // 3) 구조 변경 → 전체 재렌더
+  _forceFullRender = false;
+  _lastJobsFingerprint = fp;
+  _renderGroupedView(filtered, tbody);
 }
 
 function updateJobRowStatus(jobId, status) {
@@ -1072,6 +730,40 @@ function updateJobRowStatus(jobId, status) {
     const job = _allJobs.find(j => String(j.id || j.job_id) === String(jobId));
     const newBadge = statusBadgeHtml(status, jobId, job);
     if (cells[1].innerHTML !== newBadge) cells[1].innerHTML = newBadge;
+  }
+  // running → done/failed: preview row 제거
+  if (status !== 'running') {
+    const pvRow = tbody.querySelector(`tr[data-job-id="${CSS.escape(jobId + '__preview')}"]`);
+    if (pvRow) pvRow.remove();
+  }
+  // 그룹 헤더 통계 업데이트
+  _updateGroupStats();
+}
+
+function _updateGroupStats() {
+  const tbody = document.getElementById('jobTableBody');
+  if (!tbody) return;
+  const filtered = filterJobs(_allJobs);
+  const groups = new Map();
+  for (const job of filtered) {
+    const name = _resolveProjectName(job.cwd);
+    const key = (name && name !== '-') ? name : t('pd_other');
+    if (!groups.has(key)) groups.set(key, { running: 0, done: 0, failed: 0 });
+    const g = groups.get(key);
+    if (job.status === 'running') g.running++;
+    else if (job.status === 'done') g.done++;
+    else if (job.status === 'failed') g.failed++;
+  }
+  for (const [name, counts] of groups) {
+    const hdr = tbody.querySelector(`tr[data-job-id="${CSS.escape('__group__' + name)}"]`);
+    if (!hdr) continue;
+    const statsEl = hdr.querySelector('.job-group-stats');
+    if (!statsEl) continue;
+    let html = '';
+    if (counts.running > 0) html += `<span class="grp-stat grp-stat-running"><span class="grp-dot"></span>${counts.running}</span>`;
+    if (counts.done > 0) html += `<span class="grp-stat grp-stat-done">${counts.done}</span>`;
+    if (counts.failed > 0) html += `<span class="grp-stat grp-stat-failed">${counts.failed}</span>`;
+    if (statsEl.innerHTML !== html) statsEl.innerHTML = html;
   }
 }
 
@@ -1093,6 +785,7 @@ function toggleJobExpand(id) {
       if (prevRow) prevRow.className = '';
     }
     expandedJobId = id;
+    _forceFullRender = true;
     renderJobs(_allJobs);
   }
 }
@@ -1132,139 +825,3 @@ async function deleteCompletedJobs() {
   }
 }
 
-/* ═══════════════════════════════════════════════
-   Checkpoint Diff Viewer
-   ═══════════════════════════════════════════════ */
-
-let _ckptCache = {};  // jobId → checkpoints array
-
-async function toggleCheckpointPanel(jobId) {
-  const panel = document.getElementById(`ckptPanel-${jobId}`);
-  if (!panel) return;
-
-  if (panel.style.display !== 'none') {
-    panel.style.display = 'none';
-    return;
-  }
-  panel.style.display = '';
-  panel.innerHTML = `<div class="ckpt-loading">${t('diff_loading')}</div>`;
-
-  try {
-    const checkpoints = await apiFetch(`/api/jobs/${encodeURIComponent(jobId)}/checkpoints`);
-    _ckptCache[jobId] = checkpoints;
-    renderCheckpointSelector(jobId, checkpoints);
-  } catch (err) {
-    panel.innerHTML = `<div class="ckpt-empty">${t('diff_no_checkpoints')}</div>`;
-  }
-}
-
-function renderCheckpointSelector(jobId, checkpoints) {
-  const panel = document.getElementById(`ckptPanel-${jobId}`);
-  if (!panel) return;
-
-  if (!checkpoints || checkpoints.length === 0) {
-    panel.innerHTML = `<div class="ckpt-empty">${t('diff_no_checkpoints')}</div>`;
-    return;
-  }
-
-  const optionsHtml = checkpoints.map((c, i) => {
-    const label = `#${c.turn} — ${c.hash.slice(0, 7)} (${c.files_changed} ${t('diff_files')})`;
-    return `<option value="${escapeHtml(c.hash)}"${i === 0 ? ' selected' : ''}>${escapeHtml(label)}</option>`;
-  }).join('');
-
-  const prevDefault = checkpoints.length > 1 ? checkpoints[1].hash : '';
-  const prevOptions = checkpoints.map((c, i) => {
-    const label = `#${c.turn} — ${c.hash.slice(0, 7)}`;
-    return `<option value="${escapeHtml(c.hash)}"${i === 1 ? ' selected' : ''}>${escapeHtml(label)}</option>`;
-  }).join('');
-
-  panel.innerHTML = `
-    <div class="ckpt-selector">
-      <div class="ckpt-select-group">
-        <label>From</label>
-        <select id="ckptFrom-${escapeHtml(jobId)}" onclick="event.stopPropagation()">${prevOptions}</select>
-      </div>
-      <span class="ckpt-arrow">→</span>
-      <div class="ckpt-select-group">
-        <label>To</label>
-        <select id="ckptTo-${escapeHtml(jobId)}" onclick="event.stopPropagation()">${optionsHtml}</select>
-      </div>
-      <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); loadDiff('${escapeHtml(jobId)}')">${t('diff_compare')}</button>
-    </div>
-    <div class="ckpt-hint">${t('diff_select_hint')}</div>
-    <div id="diffResult-${escapeHtml(jobId)}" class="diff-result"></div>`;
-
-  // 자동으로 첫 체크포인트의 단독 diff 로드
-  if (checkpoints.length >= 1) {
-    loadSingleDiff(jobId, checkpoints[0].hash);
-  }
-}
-
-async function loadSingleDiff(jobId, hash) {
-  const container = document.getElementById(`diffResult-${jobId}`);
-  if (!container) return;
-  container.innerHTML = `<div class="ckpt-loading">${t('diff_loading')}</div>`;
-
-  try {
-    const data = await apiFetch(`/api/jobs/${encodeURIComponent(jobId)}/diff?from=${encodeURIComponent(hash)}`);
-    renderDiffResult(container, data);
-  } catch (err) {
-    container.innerHTML = `<div class="ckpt-empty">${err.message || t('diff_no_changes')}</div>`;
-  }
-}
-
-async function loadDiff(jobId) {
-  const fromEl = document.getElementById(`ckptFrom-${jobId}`);
-  const toEl = document.getElementById(`ckptTo-${jobId}`);
-  if (!fromEl || !toEl) return;
-
-  const container = document.getElementById(`diffResult-${jobId}`);
-  if (!container) return;
-  container.innerHTML = `<div class="ckpt-loading">${t('diff_loading')}</div>`;
-
-  try {
-    const data = await apiFetch(
-      `/api/jobs/${encodeURIComponent(jobId)}/diff?from=${encodeURIComponent(fromEl.value)}&to=${encodeURIComponent(toEl.value)}`
-    );
-    renderDiffResult(container, data);
-  } catch (err) {
-    container.innerHTML = `<div class="ckpt-empty">${err.message || t('diff_no_changes')}</div>`;
-  }
-}
-
-function renderDiffResult(container, data) {
-  if (!data.files || data.files.length === 0) {
-    container.innerHTML = `<div class="ckpt-empty">${t('diff_no_changes')}</div>`;
-    return;
-  }
-
-  const summary = `<div class="diff-summary">
-    <span class="diff-stat-files">${data.total_files} ${t('diff_files')}</span>
-    <span class="diff-stat-add">+${data.total_additions} ${t('diff_additions')}</span>
-    <span class="diff-stat-del">-${data.total_deletions} ${t('diff_deletions')}</span>
-  </div>`;
-
-  const filesHtml = data.files.map((f, idx) => {
-    const lines = f.chunks.map(line => {
-      const escaped = escapeHtml(line);
-      if (line.startsWith('@@')) return `<div class="diff-line diff-hunk">${escaped}</div>`;
-      if (line.startsWith('+')) return `<div class="diff-line diff-add">${escaped}</div>`;
-      if (line.startsWith('-')) return `<div class="diff-line diff-del">${escaped}</div>`;
-      if (line.startsWith('\\')) return `<div class="diff-line diff-meta">${escaped}</div>`;
-      return `<div class="diff-line">${escaped}</div>`;
-    }).join('');
-
-    return `<div class="diff-file">
-      <div class="diff-file-header" onclick="event.stopPropagation(); this.parentElement.classList.toggle('collapsed')">
-        <span class="diff-file-name">${escapeHtml(f.file)}</span>
-        <span class="diff-file-stats">
-          <span class="diff-stat-add">+${f.additions}</span>
-          <span class="diff-stat-del">-${f.deletions}</span>
-        </span>
-      </div>
-      <div class="diff-file-body"><pre class="diff-code">${lines}</pre></div>
-    </div>`;
-  }).join('');
-
-  container.innerHTML = summary + filesHtml;
-}

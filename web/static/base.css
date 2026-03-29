@@ -236,6 +236,7 @@ button {
 .ctx-session-label {
   display: none;
   padding: 3px 10px;
+  margin-right: 8px;
   border-radius: 12px;
   font-size: 0.75rem;
   font-weight: 600;
@@ -342,12 +343,6 @@ button {
 .session-item:hover { background: var(--surface-hover); }
 .session-item:last-child { border-bottom: none; }
 
-.session-item-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .session-item-status {
   display: inline-block;
   width: 7px;
@@ -372,20 +367,6 @@ button {
   flex-shrink: 0;
 }
 
-.session-item-slug {
-  font-size: 0.7rem;
-  color: var(--text-muted);
-  flex-shrink: 0;
-  font-style: italic;
-}
-
-.session-item-job {
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
 .session-item-prompt {
   font-size: 0.78rem;
   color: var(--text);
@@ -406,15 +387,6 @@ button {
   font-size: 0.68rem;
   color: var(--text-muted);
   flex-shrink: 0;
-}
-
-.session-item-cwd {
-  font-size: 0.65rem;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .session-filter-bar {
@@ -476,12 +448,6 @@ button {
   opacity: 0.6;
 }
 
-.session-group-count {
-  font-weight: 400;
-  color: var(--text-muted);
-  margin-left: auto;
-}
-
 .session-empty {
   padding: 24px 14px;
   text-align: center;
@@ -489,9 +455,4 @@ button {
   color: var(--text-muted);
 }
 
-.session-empty-icon {
-  font-size: 1.5rem;
-  margin-bottom: 8px;
-  opacity: 0.5;
-}
 

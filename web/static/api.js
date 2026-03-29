@@ -76,50 +76,6 @@ async function checkStatus() {
   }
 }
 
-/* ── Goals API ── */
-async function fetchGoals(status) {
-  const qs = status ? `?status=${status}` : '';
-  return apiFetch(`/api/goals${qs}`);
-}
-async function createGoal(objective, mode = 'gate', opts = {}) {
-  return apiFetch('/api/goals', {
-    method: 'POST',
-    body: JSON.stringify({ objective, mode, ...opts }),
-  });
-}
-async function getGoal(id) { return apiFetch(`/api/goals/${id}`); }
-async function updateGoal(id, fields) {
-  return apiFetch(`/api/goals/${id}/update`, {
-    method: 'POST', body: JSON.stringify(fields),
-  });
-}
-async function approveGoal(id) {
-  return apiFetch(`/api/goals/${id}/approve`, { method: 'POST' });
-}
-async function cancelGoal(id) {
-  return apiFetch(`/api/goals/${id}`, { method: 'DELETE' });
-}
-
-/* ── Memory API ── */
-async function fetchMemories(params = {}) {
-  const qs = new URLSearchParams(params).toString();
-  return apiFetch(`/api/memory${qs ? '?' + qs : ''}`);
-}
-async function createMemory(data) {
-  return apiFetch('/api/memory', {
-    method: 'POST', body: JSON.stringify(data),
-  });
-}
-async function getMemory(id) { return apiFetch(`/api/memory/${id}`); }
-async function updateMemory(id, fields) {
-  return apiFetch(`/api/memory/${id}/update`, {
-    method: 'POST', body: JSON.stringify(fields),
-  });
-}
-async function deleteMemory(id) {
-  return apiFetch(`/api/memory/${id}`, { method: 'DELETE' });
-}
-
 async function serviceAction(action) {
   const btn = document.getElementById(`btn${action.charAt(0).toUpperCase() + action.slice(1)}`);
   if (btn) btn.disabled = true;
@@ -139,3 +95,37 @@ async function serviceAction(action) {
     if (btn) btn.disabled = false;
   }
 }
+
+/* ── Goals API ── */
+
+function fetchGoals(status) {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+  return apiFetch(`/api/goals${qs}`);
+}
+
+function createGoal(objective, mode = 'gate', context = {}, budgetUsd = 5.0, maxTasks = 20) {
+  return apiFetch('/api/goals', {
+    method: 'POST',
+    body: JSON.stringify({ objective, mode, context, budget_usd: budgetUsd, max_tasks: maxTasks }),
+  });
+}
+
+function fetchGoalDetail(goalId) {
+  return apiFetch(`/api/goals/${encodeURIComponent(goalId)}`);
+}
+
+function updateGoal(goalId, changes) {
+  return apiFetch(`/api/goals/${encodeURIComponent(goalId)}/update`, {
+    method: 'POST',
+    body: JSON.stringify(changes),
+  });
+}
+
+function approveGoal(goalId) {
+  return apiFetch(`/api/goals/${encodeURIComponent(goalId)}/approve`, { method: 'POST' });
+}
+
+function cancelGoal(goalId) {
+  return apiFetch(`/api/goals/${encodeURIComponent(goalId)}`, { method: 'DELETE' });
+}
+

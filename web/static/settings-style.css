@@ -195,8 +195,6 @@
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-glow);
 }
-.setting-input-sm { width: 80px; text-align: center; }
-
 .settings-footer {
   display: flex;
   align-items: center;
@@ -204,25 +202,6 @@
   gap: 8px;
   padding: 14px 20px;
   border-top: 1px solid var(--border);
-}
-
-.setting-restart-hint {
-  font-size: 0.7rem;
-  color: var(--yellow);
-  margin-right: auto;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-/* ── Connection Modal ── */
-.conn-message {
-  font-size: 0.8rem;
-  color: var(--red);
-  background: var(--red-dim);
-  border: 1px solid rgba(248, 113, 113, 0.25);
-  border-radius: var(--radius);
-  padding: 8px 12px;
 }
 
 /* ── Running Job Preview Row ── */

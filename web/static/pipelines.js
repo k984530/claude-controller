@@ -292,6 +292,9 @@ async function deletePipeline(pipeId) {
   if (!confirm('이 자동화를 삭제하시겠습니까?')) return;
   try {
     await apiFetch(`/api/pipelines/${encodeURIComponent(pipeId)}`, { method: 'DELETE' });
+    // 즉시 로컬 상태 반영 → UI 지연 없음
+    _pipelines = _pipelines.filter(p => p.id !== pipeId);
+    renderPipelines();
     showToast('자동화 삭제됨');
     fetchPipelines();
   } catch (err) {

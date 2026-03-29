@@ -90,70 +90,6 @@
 .dir-picker-clear.visible { display: inline-flex; }
 
 /* ── Recent Directory Chips ── */
-/* ── Project Bar ── */
-.project-bar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-bottom: 10px;
-}
-.project-bar:empty { display: none; }
-.project-chips { display: flex; gap: 5px; flex-wrap: wrap; flex: 1; min-height: 0; }
-.project-chips:empty + .project-action-btn { margin-left: 0; }
-
-.project-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 12px;
-  border-radius: 14px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
-  font-size: 0.75rem;
-  cursor: pointer;
-  transition: all var(--transition);
-  max-width: 200px;
-}
-.project-chip:hover { background: var(--surface-hover); border-color: var(--border-light); }
-.project-chip.selected {
-  background: var(--accent-glow);
-  border-color: var(--accent);
-  color: var(--accent);
-}
-.project-chip .project-chip-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.project-chip .project-chip-remove {
-  display: inline-flex;
-  align-items: center;
-  opacity: 0;
-  transition: opacity var(--transition);
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-.project-chip:hover .project-chip-remove { opacity: 1; }
-.project-chip .project-chip-remove:hover { color: var(--red); }
-
-.project-action-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  border: 1px dashed var(--border-light);
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all var(--transition);
-  flex-shrink: 0;
-}
-.project-action-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-glow); }
-
 .recent-dirs {
   display: flex;
   align-items: center;
@@ -758,6 +694,56 @@ textarea::placeholder, input::placeholder {
 }
 .form-actions-buttons {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-left: auto;
+}
+
+/* ── Self-Manage Button & Menu ── */
+.self-manage-wrap {
+  position: relative;
+}
+.self-manage-menu {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+  min-width: 180px;
+  z-index: 100;
+  padding: 4px;
+}
+.self-manage-menu.open {
+  display: block;
+}
+.self-manage-menu-title {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 6px 10px 4px;
+  letter-spacing: 0.03em;
+}
+.self-manage-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  background: none;
+  color: var(--text-primary);
+  font-size: 0.76rem;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+}
+.self-manage-item:hover {
+  background: var(--bg-hover);
+}
+.self-manage-item svg {
+  flex-shrink: 0;
+  opacity: 0.7;
 }
