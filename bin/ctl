@@ -68,7 +68,7 @@ from utils import parse_meta_file, is_service_running, cwd_to_project_dir, scan_
 from projects import list_projects, get_project, add_project, create_project, remove_project, update_project
 from pipeline import (
     list_pipelines, get_pipeline_status, create_pipeline, delete_pipeline,
-    run_next, force_run, reset_phase, tick, tick_all,
+    run_next, reset_phase, tick, tick_all,
 )
 import shutil
 
@@ -700,10 +700,7 @@ def cmd_pipeline(args):
     elif action == "run":
         if not args.id:
             err("파이프라인 ID를 지정하세요 (--id)")
-        if args.force:
-            result, error = force_run(args.id)
-        else:
-            result, error = run_next(args.id)
+        result, error = run_next(args.id)
         if error:
             err(error)
         out(result, args.pretty)

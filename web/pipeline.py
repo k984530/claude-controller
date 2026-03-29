@@ -3,7 +3,7 @@ Pipeline Engine — 자기 진화형 자동화
 
 핵심 기능:
   1. 컨텍스트 주입 — 실행 전 git log + 이전 결과를 프롬프트에 자동 삽입
-  2. 적응형 인터벌 — 결과 기반 실행 주기 자동 조절
+  2. 프롬프트 개선 — 연속 무변경 시 다른 관점으로 접근하도록 힌트 주입
   3. 파이프라인 체이닝 — 완료 시 다른 파이프라인 트리거
 
 CRUD/유틸리티: pipeline_crud.py
@@ -15,7 +15,7 @@ import time
 
 from config import DATA_DIR
 from jobs import send_to_fifo, get_job_result
-from pipeline_classify import classify_result, adapt_interval
+from pipeline_classify import classify_result
 from pipeline_context import get_git_snapshot, should_skip_dispatch, build_enriched_prompt
 from pipeline_crud import (
     # 재수출: handler_crud.py 등 외부에서 pipeline 모듈을 통해 접근
@@ -55,9 +55,9 @@ def dispatch(pipe_id: str, force: bool = False) -> tuple[dict | None, str | None
         if not force:
             skip, reason = should_skip_dispatch(pipe)
             if skip:
-                effective = pipe.get("effective_interval_sec") or pipe.get("interval_sec")
-                if effective:
-                    pipe["next_run"] = _next_run_str(effective)
+                interval_sec = pipe.get("interval_sec")
+                if interval_sec:
+                    pipe["next_run"] = _next_run_str(interval_sec)
                 pipe["skip_count"] = pipe.get("skip_count", 0) + 1
                 pipe["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
                 save_pipelines(pipelines)
@@ -98,8 +98,8 @@ def dispatch(pipe_id: str, force: bool = False) -> tuple[dict | None, str | None
         return None, f"FIFO 전송 실패: {send_err}"
 
     job_id = result["job_id"]
-    effective = pipe.get("effective_interval_sec") or pipe.get("interval_sec")
-    nr = _next_run_str(effective) if effective else None
+    interval_sec = pipe.get("interval_sec")
+    nr = _next_run_str(interval_sec) if interval_sec else None
 
     git_snapshot = get_git_snapshot(pipe["project_path"])
 
@@ -130,7 +130,6 @@ def tick(pipe_id: str) -> tuple[dict | None, str | None]:
 
     job_id = pipe.get("job_id")
     if not job_id:
-        effective = pipe.get("effective_interval_sec") or pipe.get("interval_sec")
         if pipe.get("next_run") and _parse_timestamp(pipe["next_run"]) > time.time():
             remaining = int(_parse_timestamp(pipe["next_run"]) - time.time())
             return {"action": "waiting", "remaining_sec": remaining}, None
@@ -170,10 +169,9 @@ def tick(pipe_id: str) -> tuple[dict | None, str | None]:
             cost_usd = full_result.get("cost_usd")
             duration_ms = full_result.get("duration_ms")
 
-    new_interval = adapt_interval(pipe, result_text or "")
     chain_target = pipe.get("on_complete")
 
-    def complete(p, _s=summary, _c=classification, _ni=new_interval,
+    def complete(p, _s=summary, _c=classification,
                  _cost=cost_usd, _dur=duration_ms):
         p["last_result"] = _s
         p["run_count"] = p.get("run_count", 0) + 1
@@ -192,10 +190,7 @@ def tick(pipe_id: str) -> tuple[dict | None, str | None]:
             history = history[-_MAX_HISTORY:]
         p["history"] = history
 
-        if _ni is not None:
-            p["effective_interval_sec"] = _ni
-            p["next_run"] = _next_run_str(_ni)
-        elif p.get("interval_sec"):
+        if p.get("interval_sec"):
             p["next_run"] = _next_run_str(p["interval_sec"])
 
     _update_pipeline(pipe_id, complete)
@@ -211,13 +206,6 @@ def tick(pipe_id: str) -> tuple[dict | None, str | None]:
         "run_count": pipe.get("run_count", 0) + 1,
         "classification": classification,
     }
-    if new_interval and pipe.get("interval_sec") and new_interval != pipe.get("interval_sec"):
-        base = pipe["interval_sec"]
-        response["interval_adapted"] = {
-            "base": base,
-            "new": new_interval,
-            "change": f"{'+' if new_interval > base else ''}{int((new_interval - base) / base * 100)}%",
-        }
     if chain_result:
         response["chain"] = chain_result
 
@@ -250,10 +238,7 @@ def stop_pipeline(pipe_id: str) -> tuple[dict | None, str | None]:
 
 
 def reset_phase(pipe_id: str, phase: str = None) -> tuple[dict | None, str | None]:
-    """상태 초기화 — 적응형 인터벌도 기본값으로 복구."""
-    def reset(p):
-        p["effective_interval_sec"] = p.get("interval_sec")
-    _update_pipeline(pipe_id, reset)
+    """상태 초기화 후 즉시 실행."""
     return run_next(pipe_id)
 
 
