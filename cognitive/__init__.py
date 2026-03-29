@@ -3,12 +3,11 @@
 from cognitive.goal_engine import GoalEngine, GoalStatus, ExecutionMode
 from cognitive.orchestrator import Orchestrator
 from cognitive.planner import Planner
-from cognitive.dispatcher import Dispatcher
 from cognitive.evaluator import Evaluator
 from cognitive.learning import LearningModule
 
 __all__ = [
     "GoalEngine", "GoalStatus", "ExecutionMode",
-    "Orchestrator", "Planner", "Dispatcher",
+    "Orchestrator", "Planner",
     "Evaluator", "LearningModule",
 ]

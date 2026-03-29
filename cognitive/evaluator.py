@@ -12,7 +12,6 @@ Gate 모드에서는 각 단계 후 사용자 승인을 요청한다.
 """
 
 import json
-import os
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path

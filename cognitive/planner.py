@@ -12,7 +12,6 @@ Claude를 사용하여 목표를 분석하고, 태스크를 분해하며, 의존
 import json
 import os
 import subprocess
-import time
 from pathlib import Path
 from typing import Optional
 

@@ -11,10 +11,8 @@ Learning Module — 자기 개선 엔진
 """
 
 import json
-import os
 import time
 from pathlib import Path
-from typing import Optional
 
 from memory.store import MemoryStore, MemoryType
 

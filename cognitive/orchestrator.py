@@ -7,19 +7,17 @@ Goal Engine, Planner, Dispatcher, Evaluator, Memory를 조율하여
   Goal → Plan → Execute → Evaluate → [Learn] → Done/Retry
 """
 
-import json
 import logging
 import time
 from pathlib import Path
-from typing import Optional
 
 from cognitive.goal_engine import GoalEngine, GoalStatus, ExecutionMode
 from cognitive.planner import Planner
-from cognitive.dispatcher import Dispatcher
 from cognitive.evaluator import Evaluator
 from cognitive.learning import LearningModule
-from memory.store import MemoryStore, MemoryType
+from memory.store import MemoryStore
 from dag.graph import TaskDAG
+from dag.executor import DAGExecutor, BudgetExceeded
 
 logger = logging.getLogger("orchestrator")
 
@@ -119,6 +117,8 @@ class Orchestrator:
     def execute(self, goal_id: str) -> dict:
         """계획된 DAG를 실행한다.
 
+        DAGExecutor를 사용하여 예산 체크와 메모리 컨텍스트 주입을 수행한다.
+
         Returns:
             실행 완료된 목표 dict
         """
@@ -129,8 +129,8 @@ class Orchestrator:
         cwd = goal["context"].get("cwd", ".")
         self.goal_engine.update_status(goal_id, GoalStatus.RUNNING)
 
-        # Dispatcher 초기화
-        dispatcher = Dispatcher(
+        # DAG Executor 초기화
+        executor = DAGExecutor(
             claude_bin=self.claude_bin,
             logs_dir=str(self.base_dir / "logs" / "goals"),
             prompts_dir=str(self.base_dir / "cognitive" / "prompts"),
@@ -143,9 +143,26 @@ class Orchestrator:
             ),
         )
 
-        # DAG 실행
+        # 관련 메모리 수집
+        memories = self.memory.get_relevant(
+            goal["objective"], project=cwd,
+        )
+
+        # DAG 실행 (예산 체크 포함)
         dag = TaskDAG.from_dict(goal["dag"])
-        completed_dag = dispatcher.run_dag(dag, cwd, goal_id)
+        try:
+            completed_dag = executor.execute(
+                dag, cwd, goal_id,
+                budget_usd=goal.get("budget_usd", 0),
+                memory_context=memories,
+            )
+        except BudgetExceeded as exc:
+            logger.warning(f"Goal {goal_id} budget exceeded: {exc}")
+            goal["dag"] = dag.to_dict()
+            goal["updated_at"] = time.time()
+            self.goal_engine._save_goal(goal)
+            self.goal_engine.update_status(goal_id, GoalStatus.FAILED)
+            return self.goal_engine.get_goal(goal_id)
 
         # DAG 상태를 Goal에 반영
         goal["dag"] = completed_dag.to_dict()

@@ -9,7 +9,6 @@ DAG의 실행 순서에 따라 Worker를 배정하고, claude -p 프로세스를
 - 실패 태스크 자동 재시도 (최대 2회, 프롬프트 변형)
 """
 
-import json
 import os
 import subprocess
 import time
@@ -17,6 +16,10 @@ from pathlib import Path
 from typing import Optional, Callable
 
 from dag.graph import TaskDAG, TaskNode
+from dag.worker_utils import (
+    parse_cost, load_system_prompt,
+    augment_retry_prompt, build_claude_cmd,
+)
 
 
 class WorkerProcess:
@@ -87,18 +90,12 @@ class Dispatcher:
 
     def _dispatch_task(self, task: TaskNode, cwd: str, goal_id: str):
         """개별 태스크를 claude -p 프로세스로 실행한다."""
-        system_prompt = self._load_worker_prompt(task.worker_type)
+        system_prompt = load_system_prompt(self.prompts_dir, task.worker_type)
         output_path = str(self.logs_dir / f"{goal_id}_{task.id}.out")
 
-        cmd = [
-            self.claude_bin,
-            "-p", task.prompt,
-            "--output-format", "json",
-            "--allowedTools", self._tools_for_worker(task.worker_type),
-        ]
-
-        if system_prompt:
-            cmd.extend(["--append-system-prompt", system_prompt])
+        cmd = build_claude_cmd(
+            self.claude_bin, task.prompt, task.worker_type, system_prompt,
+        )
 
         out_file = open(output_path, "w")
         process = subprocess.Popen(
@@ -125,7 +122,7 @@ class Dispatcher:
             node.duration_ms = duration_ms
 
             # 결과 파싱
-            cost = self._parse_cost(wp.output_path)
+            cost = parse_cost(wp.output_path)
             node.cost_usd = cost
 
             if ret == 0:
@@ -136,7 +133,9 @@ class Dispatcher:
                 node.retries += 1
                 if node.retries <= self.MAX_RETRIES:
                     # 재시도: 프롬프트 앞에 실패 맥락 추가
-                    node.prompt = self._augment_retry_prompt(node)
+                    node.prompt = augment_retry_prompt(
+                        node.prompt, node.retries, self.MAX_RETRIES
+                    )
                     node.status = "pending"
                 else:
                     node.status = "failed"
@@ -155,38 +154,3 @@ class Dispatcher:
         ready = dag.get_ready_tasks()
         return len(ready) == 0
 
-    def _load_worker_prompt(self, worker_type: str) -> str:
-        """Worker 유형별 시스템 프롬프트를 로드한다."""
-        path = self.prompts_dir / f"{worker_type}.md"
-        if path.exists():
-            return path.read_text()
-        return ""
-
-    def _tools_for_worker(self, worker_type: str) -> str:
-        """Worker 유형에 따른 허용 도구를 반환한다."""
-        tool_sets = {
-            "analyst": "Read,Glob,Grep,Bash",
-            "coder": "Bash,Read,Write,Edit,Glob,Grep",
-            "tester": "Bash,Read,Write,Edit,Glob,Grep",
-            "reviewer": "Read,Glob,Grep,Bash",
-            "writer": "Read,Write,Edit,Glob,Grep",
-        }
-        return tool_sets.get(worker_type, "Bash,Read,Write,Edit,Glob,Grep")
-
-    def _augment_retry_prompt(self, node: TaskNode) -> str:
-        """재시도 시 프롬프트에 실패 맥락을 추가한다."""
-        return (
-            f"[재시도 {node.retries}/{self.MAX_RETRIES}] "
-            f"이전 시도가 실패했습니다. 다른 접근 방식을 시도하세요.\n\n"
-            f"원래 태스크:\n{node.prompt}"
-        )
-
-    def _parse_cost(self, output_path: str) -> float:
-        """출력 파일에서 비용 정보를 추출한다."""
-        try:
-            with open(output_path) as f:
-                data = json.load(f)
-            # claude --output-format json 응답에서 cost 추출
-            return float(data.get("cost_usd", 0) or 0)
-        except (json.JSONDecodeError, FileNotFoundError, KeyError):
-            return 0.0
