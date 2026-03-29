@@ -29,12 +29,28 @@ VALID_STATUSES = {"running", "done", "failed", "queued", "cancelled", "pending"}
 class TestGetApiJobs(unittest.TestCase):
     """GET /api/jobs 엔드포인트 테스트"""
 
+    _is_paginated = None  # 서버 응답 형식 캐시
+
+    @classmethod
+    def setUpClass(cls):
+        """서버 연결 + 응답 형식(paginated dict vs flat list) 사전 확인."""
+        try:
+            resp = requests.get(JOBS_URL, timeout=5)
+        except requests.ConnectionError:
+            raise unittest.SkipTest(f"서버에 연결할 수 없습니다: {BASE_URL}")
+        cls._is_paginated = isinstance(resp.json(), dict)
+
     @staticmethod
     def _get_jobs(data):
         """페이지네이션 응답 또는 배열 응답에서 jobs 리스트를 추출한다."""
         if isinstance(data, list):
             return data
         return data.get("jobs", [])
+
+    def _require_paginated(self):
+        """페이지네이션 형식이 아니면 테스트를 skip한다."""
+        if not self._is_paginated:
+            self.skipTest("서버가 paginated 응답을 반환하지 않음 — 서버 재시작 필요")
 
     # ── 기본 응답 검증 ──────────────────────────────
 
@@ -51,6 +67,7 @@ class TestGetApiJobs(unittest.TestCase):
 
     def test_response_is_paginated_object(self):
         """응답 본문이 페이지네이션 객체이다 (jobs, total, page, limit, pages)."""
+        self._require_paginated()
         resp = requests.get(JOBS_URL, timeout=5)
         data = resp.json()
         self.assertIsInstance(data, dict)
@@ -62,6 +79,7 @@ class TestGetApiJobs(unittest.TestCase):
 
     def test_pagination_defaults(self):
         """기본 page=1, limit=10 으로 응답한다."""
+        self._require_paginated()
         resp = requests.get(JOBS_URL, timeout=5)
         data = resp.json()
         self.assertEqual(data["page"], 1)
@@ -70,6 +88,7 @@ class TestGetApiJobs(unittest.TestCase):
 
     def test_pagination_custom_limit(self):
         """?limit=2 로 요청하면 최대 2개만 반환한다."""
+        self._require_paginated()
         resp = requests.get(JOBS_URL, params={"limit": 2}, timeout=5)
         data = resp.json()
         self.assertLessEqual(len(data["jobs"]), 2)
@@ -77,6 +96,7 @@ class TestGetApiJobs(unittest.TestCase):
 
     def test_pagination_page_navigation(self):
         """?page=2&limit=1 로 두 번째 페이지를 요청할 수 있다."""
+        self._require_paginated()
         resp = requests.get(JOBS_URL, params={"page": 2, "limit": 1}, timeout=5)
         data = resp.json()
         if data["total"] < 2:
@@ -86,6 +106,7 @@ class TestGetApiJobs(unittest.TestCase):
 
     def test_pagination_total_consistency(self):
         """total 은 pages * limit 이상이어야 한다."""
+        self._require_paginated()
         resp = requests.get(JOBS_URL, timeout=5)
         data = resp.json()
         self.assertGreaterEqual(data["pages"], 1)

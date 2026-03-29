@@ -340,6 +340,22 @@ cleanup_old_jobs() {
   fi
 }
 
+# ── 7b. 테스트 게이트 ────────────────────────────────────────
+
+check_tests() {
+  local result
+  result=$($PYTHON -m pytest "$CONTROLLER_DIR/tests/" -q --tb=line 2>&1 | tail -3) || true
+
+  if echo "$result" | grep -q "failed"; then
+    warn "테스트 실패: $(echo "$result" | tail -1)"
+    return 1
+  fi
+  local passed
+  passed=$(echo "$result" | grep -oE '[0-9]+ passed' | head -1 || echo "0 passed")
+  log "Tests OK: $passed"
+  return 0
+}
+
 # ── 메인 실행 ──────────────────────────────────────────────
 
 main() {
@@ -353,6 +369,9 @@ main() {
   if ! check_service; then
     restart_service || true
   fi
+
+  # 2b. 테스트 게이트 — 실패 시에도 tick은 진행하되 경고
+  check_tests || true
 
   # 3. 파이프라인 tick (서비스가 살아있을 때만 의미있음)
   if check_service 2>/dev/null; then
