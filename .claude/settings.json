@@ -11,6 +11,17 @@
             "statusMessage": "Safety guard..."
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /Users/choiwon/Desktop/Orchestration/controller/bin/hooks/pre-write-guard.sh",
+            "timeout": 10,
+            "statusMessage": "Write guard..."
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -22,6 +33,17 @@
             "command": "bash /Users/choiwon/Desktop/Orchestration/controller/bin/hooks/post-edit-test.sh",
             "timeout": 60,
             "statusMessage": "Running tests..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /Users/choiwon/Desktop/Orchestration/controller/bin/hooks/audit-log.sh",
+            "timeout": 5,
+            "statusMessage": "Logging..."
           }
         ]
       }

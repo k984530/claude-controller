@@ -67,22 +67,31 @@ CHANGE_PATTERNS = [
 
 
 def classify_result(result_text: str) -> str:
-    """결과를 분류한다: 'no_change', 'has_change', 'unknown'"""
+    """결과를 분류한다: 'no_change', 'has_change', 'unknown'
+
+    양쪽 패턴을 모두 체크한 뒤 점수로 판정한다.
+    change_score >= 2 이면 no_change 패턴이 있어도 has_change 우선.
+    """
     if not result_text:
         return "unknown"
     text = result_text[:2000].lower()
 
-    # 변경 없음 패턴 우선 체크
-    for pat in NO_CHANGE_PATTERNS:
-        if re.search(pat, text, re.IGNORECASE):
-            return "no_change"
-
-    # 변경 있음 패턴
+    # 변경 있음 점수 집계
     change_score = 0
     for pat in CHANGE_PATTERNS:
         if re.search(pat, text, re.IGNORECASE):
             change_score += 1
+
+    # 변경 있음이 강하면 (2개 이상 매칭) 우선 반환
     if change_score >= 2:
+        return "has_change"
+
+    # 변경 없음 패턴 체크
+    for pat in NO_CHANGE_PATTERNS:
+        if re.search(pat, text, re.IGNORECASE):
+            return "no_change"
+
+    if change_score >= 1:
         return "has_change"
 
     return "unknown"

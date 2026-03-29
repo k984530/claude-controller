@@ -36,36 +36,54 @@ try:
 except: print('')
 " 2>/dev/null)
 
-# ── .py 파일만 대상 ──
+# ── 대상 파일 필터 ──
+IS_PY=false
+IS_SH=false
 case "$FILE_PATH" in
   */web/*.py|*/tests/*.py|*/cognitive/*.py|*/dag/*.py|*/lib/*.py|*/bin/*.py)
-    ;;
+    IS_PY=true ;;
+  *.sh)
+    IS_SH=true ;;
   *)
-    exit 0
-    ;;
+    exit 0 ;;
 esac
 
 # ── 쿨다운 갱신 ──
 date +%s > "$COOLDOWN_FILE"
 
-# ── 구문 검증 (py_compile) ──
-SYNTAX_ERR=""
-if [[ -f "$FILE_PATH" ]]; then
-  SYNTAX_ERR=$(python3 -c "import py_compile; py_compile.compile('$FILE_PATH', doraise=True)" 2>&1) || true
-fi
-
-# ── pytest 실행 ──
-cd "$PROJECT_DIR"
-RESULT=$(python3 -m pytest tests/ -q --tb=line 2>&1 | tail -5) || true
-
 FEEDBACK=""
-if [[ -n "$SYNTAX_ERR" ]]; then
-  FEEDBACK="SYNTAX ERROR: $(echo "$SYNTAX_ERR" | tail -1) "
+
+# ── Python: py_compile + pytest ──
+if $IS_PY; then
+  SYNTAX_ERR=""
+  if [[ -f "$FILE_PATH" ]]; then
+    SYNTAX_ERR=$(TARGET_FILE="$FILE_PATH" python3 -c "
+import os, py_compile
+py_compile.compile(os.environ['TARGET_FILE'], doraise=True)
+" 2>&1) || true
+  fi
+  if [[ -n "$SYNTAX_ERR" ]]; then
+    FEEDBACK="PY SYNTAX: $(echo "$SYNTAX_ERR" | tail -1) "
+  fi
+
+  cd "$PROJECT_DIR"
+  RESULT=$(python3 -m pytest tests/ -q --tb=line 2>&1 | tail -5) || true
+  if echo "$RESULT" | grep -q "failed"; then
+    FEEDBACK="${FEEDBACK}TEST FAIL: $(echo "$RESULT" | tail -1)"
+  fi
 fi
-if echo "$RESULT" | grep -q "failed"; then
-  FEEDBACK="${FEEDBACK}TEST FAIL: $(echo "$RESULT" | tail -1)"
+
+# ── Shell: bash -n 구문 검증 ──
+if $IS_SH; then
+  if [[ -f "$FILE_PATH" ]]; then
+    SH_ERR=$(bash -n "$FILE_PATH" 2>&1) || true
+    if [[ -n "$SH_ERR" ]]; then
+      FEEDBACK="SH SYNTAX: $(echo "$SH_ERR" | head -3 | tr '\n' ' ')"
+    fi
+  fi
 fi
 
 if [[ -n "$FEEDBACK" ]]; then
-  echo '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"'"$(echo "$FEEDBACK" | tr '\n' ' ')"'"}}'
+  SAFE_FB=$(echo "$FEEDBACK" | tr '\n' ' ' | sed 's/"/\\"/g' | head -c 500)
+  echo "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"$SAFE_FB\"}}"
 fi

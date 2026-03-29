@@ -45,10 +45,23 @@ def pipeline_lock():
         fd.close()
 
 
+# 제거된 기능의 잔여 필드 — 로드 시 자동 삭제
+_DEPRECATED_FIELDS = {"effective_interval_sec", "adaptive_multiplier", "skip_count"}
+
+
 def load_pipelines() -> list[dict]:
     try:
         if PIPELINES_FILE.exists():
-            return json.loads(PIPELINES_FILE.read_text("utf-8"))
+            pipes = json.loads(PIPELINES_FILE.read_text("utf-8"))
+            dirty = False
+            for p in pipes:
+                for field in _DEPRECATED_FIELDS:
+                    if field in p:
+                        del p[field]
+                        dirty = True
+            if dirty:
+                save_pipelines(pipes)
+            return pipes
     except (json.JSONDecodeError, OSError):
         pass
     return []

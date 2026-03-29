@@ -54,6 +54,31 @@ if echo "$COMMAND" | grep -qE 'git\s+checkout\s+\.\s*$'; then
   BLOCKED="git checkout . 감지 — 모든 변경사항 폐기"
 fi
 
+# git branch -D (강제 브랜치 삭제)
+if echo "$COMMAND" | grep -qE 'git\s+branch\s+-[a-zA-Z]*D'; then
+  BLOCKED="git branch -D 감지 — 브랜치 강제 삭제 위험"
+fi
+
+# git restore . (모든 변경 폐기)
+if echo "$COMMAND" | grep -qE 'git\s+restore\s+\.\s*$'; then
+  BLOCKED="git restore . 감지 — 모든 변경사항 폐기"
+fi
+
+# chmod 777 (과도한 권한)
+if echo "$COMMAND" | grep -qE 'chmod\s+777'; then
+  BLOCKED="chmod 777 감지 — 과도한 파일 권한 설정"
+fi
+
+# SQL 파괴 명령 (DROP, TRUNCATE)
+if echo "$COMMAND" | grep -qiE '(DROP\s+(TABLE|DATABASE)|TRUNCATE\s+TABLE)'; then
+  BLOCKED="SQL 파괴 명령 감지 (DROP/TRUNCATE)"
+fi
+
+# --no-verify (hook 우회 방지)
+if echo "$COMMAND" | grep -qE 'git\s+.*--no-verify'; then
+  BLOCKED="--no-verify 감지 — git hook 우회 금지"
+fi
+
 # ── 차단 결과 ──
 if [[ -n "$BLOCKED" ]]; then
   echo "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"SAFETY GUARD: $BLOCKED\"}}"

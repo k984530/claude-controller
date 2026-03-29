@@ -17,5 +17,6 @@ try:
 except: print('Claude Code 작업 완료')
 " 2>/dev/null || echo "Claude Code 작업 완료")
 
-# macOS 알림 (소리 포함)
-osascript -e "display notification \"$MSG\" with title \"Controller\" sound name \"Glass\"" 2>/dev/null || true
+# macOS 알림 (소리 포함) — injection 방지: 특수문자 이스케이프
+SAFE_MSG=$(echo "$MSG" | sed 's/[\\\"]/\\&/g' | head -c 200)
+osascript -e "display notification \"$SAFE_MSG\" with title \"Controller\" sound name \"Glass\"" 2>/dev/null || true
