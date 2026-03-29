@@ -132,19 +132,9 @@ function renderPipelines() {
     const projectName = p.project_path ? p.project_path.split('/').filter(Boolean).pop() : '';
     const projectPath = p.project_path || '';
 
-    // 적응형 인터벌 표시
-    const baseInterval = p.interval_sec;
-    const effectiveInterval = p.effective_interval_sec;
-    const isAdapted = baseInterval && effectiveInterval && baseInterval !== effectiveInterval;
     let intervalLabel = '';
     if (p.interval) {
-      if (isAdapted) {
-        const effMin = Math.round(effectiveInterval / 60);
-        const pct = Math.round((effectiveInterval - baseInterval) / baseInterval * 100);
-        intervalLabel = `<span style="font-size:0.65rem;padding:1px 5px;background:rgba(168,85,247,0.1);color:#a855f7;border-radius:3px;" title="기본: ${escapeHtml(p.interval)}, 적응: ${effMin}분 (${pct > 0 ? '+' : ''}${pct}%)">${effMin}분 적응</span>`;
-      } else {
-        intervalLabel = `<span style="font-size:0.65rem;padding:1px 5px;background:rgba(59,130,246,0.1);color:var(--primary);border-radius:3px;">${escapeHtml(p.interval)} 반복</span>`;
-      }
+      intervalLabel = `<span style="font-size:0.65rem;padding:1px 5px;background:rgba(59,130,246,0.1);color:var(--primary);border-radius:3px;">${escapeHtml(p.interval)} 반복</span>`;
     }
 
     // 체이닝 표시
@@ -310,20 +300,10 @@ async function fetchEvolutionSummary() {
     const data = await apiFetch('/api/pipelines/evolution');
     const cls = data.classifications || {};
     const total = (cls.has_change || 0) + (cls.no_change || 0) + (cls.unknown || 0);
-    const adaptations = (data.interval_adaptations || []);
-
-    let adaptHtml = '';
-    if (adaptations.length > 0) {
-      adaptHtml = adaptations.map(a =>
-        `<span style="font-size:0.65rem;color:#a855f7;">${escapeHtml(a.name)}: ${a.change_pct > 0 ? '+' : ''}${a.change_pct}%</span>`
-      ).join(' ');
-    }
-
     el.innerHTML = `<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:8px 12px;background:var(--bg-secondary);border-radius:8px;font-size:0.7rem;color:var(--text-muted);">
       <span>총 ${data.total_runs}회 실행</span>
       <span>효율 ${data.efficiency_pct}%</span>
       ${total > 0 ? `<span style="color:var(--text-secondary);">변경:${cls.has_change||0} / 무변경:${cls.no_change||0}</span>` : ''}
-      ${adaptHtml}
     </div>`;
   } catch { el.innerHTML = ''; }
 }
