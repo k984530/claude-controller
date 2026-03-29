@@ -40,7 +40,6 @@ async function init() {
   applyTheme(localStorage.getItem('theme') || 'dark');
   await autoConnect();
   loadRecentDirs();
-  fetchPresets();
   fetchPersonas();
   fetchPipelines();
   checkStatus();
