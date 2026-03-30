@@ -17,10 +17,10 @@
 <link rel="stylesheet" href="stream-ui.css">
 <link rel="stylesheet" href="settings-style.css">
 <link rel="stylesheet" href="pipeline.css">
+<link rel="stylesheet" href="goals.css">
 <link rel="stylesheet" href="skills.css">
 <link rel="stylesheet" href="results.css">
 <link rel="stylesheet" href="suggestions.css">
-<link rel="stylesheet" href="presets.css">
 </head>
 <body>
 
@@ -202,25 +202,6 @@
               </div>
             </div>
           </form>
-          <!-- Preset Bar -->
-          <div class="preset-bar" id="presetBar">
-            <div class="preset-bar-label">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-              <span data-i18n="presets">프리셋</span>
-              <span class="preset-count" id="presetCount"></span>
-            </div>
-            <button type="button" class="preset-trigger" onclick="togglePresetMenu()">
-              <span data-i18n="preset_load">불러오기</span>
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-            </button>
-            <button type="button" class="preset-save-btn" onclick="saveCurrentAsPreset()">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-              <span data-i18n="preset_save">현재 설정 저장</span>
-            </button>
-            <div class="preset-dropdown" id="presetDropdown">
-              <div id="presetDropdownList"></div>
-            </div>
-          </div>
         </div>
       </div>
     </div>
