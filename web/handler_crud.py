@@ -93,11 +93,15 @@ class PipelineHandlerMixin:
         command = body.get("command", "").strip()
         if not path or not command:
             return self._error_response("project_path와 command 필드가 필요합니다", code="MISSING_FIELD")
+        skill_ids = body.get("skill_ids")
+        if skill_ids and not isinstance(skill_ids, list):
+            skill_ids = None
         result, err = self._pipeline().create_pipeline(
             path, command=command,
             interval=body.get("interval", "").strip(),
             name=body.get("name", "").strip(),
-            on_complete=body.get("on_complete", "").strip())
+            on_complete=body.get("on_complete", "").strip(),
+            skill_ids=skill_ids)
         if err:
             self._error_response(err, 400)
         else:
@@ -126,6 +130,7 @@ class PipelineHandlerMixin:
             interval=body.get("interval"),
             name=body.get("name"),
             on_complete=body.get("on_complete"),
+            skill_ids=body.get("skill_ids"),
         )
         if err:
             self._error_response(err, 400)

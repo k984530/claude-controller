@@ -185,7 +185,7 @@ def get_pipeline(pipe_id: str) -> tuple[dict | None, str | None]:
 
 def create_pipeline(
     project_path: str, command: str, interval: str = "",
-    name: str = "", on_complete: str = "",
+    name: str = "", on_complete: str = "", skill_ids: list | None = None,
 ) -> tuple[dict | None, str | None]:
     project_path = os.path.abspath(os.path.expanduser(project_path))
     if not command.strip():
@@ -200,6 +200,7 @@ def create_pipeline(
         "name": name,
         "project_path": project_path,
         "command": command,
+        "skill_ids": skill_ids or [],
         "interval": interval or None,
         "interval_sec": interval_sec,
         "status": "active",
@@ -223,7 +224,7 @@ def create_pipeline(
 
 def modify_pipeline(
     pipe_id: str, command: str = None, interval: str = None,
-    name: str = None, on_complete: str = None,
+    name: str = None, on_complete: str = None, skill_ids: list | None = None,
 ) -> tuple[dict | None, str | None]:
     def updater(p):
         if command is not None:
@@ -232,6 +233,8 @@ def modify_pipeline(
             p["name"] = name
         if on_complete is not None:
             p["on_complete"] = on_complete if on_complete else None
+        if skill_ids is not None:
+            p["skill_ids"] = skill_ids
         if interval is not None:
             if interval == "":
                 p["interval"] = None

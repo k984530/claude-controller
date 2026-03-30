@@ -10,6 +10,7 @@ File System & Config HTTP 핸들러 Mixin
 
 import json
 import os
+import subprocess
 
 from config import DATA_DIR, SETTINGS_FILE, SKILLS_FILE, RECENT_DIRS_FILE
 
@@ -169,6 +170,40 @@ class FsHandlerMixin:
             self._json_response({"current": dir_path, "entries": entries})
         except Exception as e:
             self._error_response(f"디렉토리 읽기 실패: {e}", 500, code="DIR_READ_ERROR")
+
+    def _handle_find_dir(self, name):
+        """GET /api/find-dir?name=controller — 이름으로 디렉토리 검색 (macOS mdfind 우선, find 폴백)"""
+        if not name or "/" in name or "\\" in name:
+            return self._error_response("유효한 폴더 이름이 필요합니다", code="INVALID_NAME")
+        home = os.path.expanduser("~")
+        # macOS: mdfind (Spotlight) — 즉시 검색
+        try:
+            result = subprocess.run(
+                ["mdfind", f"kMDItemFSName == '{name}' && kMDItemContentType == public.folder"],
+                capture_output=True, text=True, timeout=3,
+            )
+            if result.returncode == 0:
+                for line in result.stdout.strip().split("\n"):
+                    line = line.strip()
+                    if line and os.path.isdir(line) and line.startswith(home):
+                        return self._json_response({"path": line})
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+        # 폴백: find (depth 4, 홈 디렉토리)
+        try:
+            result = subprocess.run(
+                ["find", home, "-maxdepth", "4", "-type", "d", "-name", name,
+                 "-not", "-path", "*/.*", "-not", "-path", "*/node_modules/*"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if result.returncode == 0:
+                for line in result.stdout.strip().split("\n"):
+                    line = line.strip()
+                    if line and os.path.isdir(line):
+                        return self._json_response({"path": line})
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+        self._error_response(f"'{name}' 폴더를 찾을 수 없습니다", 404, code="DIR_NOT_FOUND")
 
     def _handle_mkdir(self):
         body = self._read_body()

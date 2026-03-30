@@ -281,6 +281,7 @@
       </div>
     </div>
 
+
     <!-- Section 3: Automations -->
     <div class="section" id="pipelineSection">
       <div class="card">
@@ -303,7 +304,7 @@
         <div id="evolutionSummary"></div>
         <div id="pipelineList" class="pipeline-list">
           <div class="empty-state" style="padding:20px; text-align:center; color:var(--text-muted); font-size:0.8rem;">
-            자동화가 없습니다. 위 프리셋을 적용하거나 입력창에서 자동화를 등록하세요.
+            자동화가 없습니다. 입력창에서 자동화를 등록하세요.
           </div>
         </div>
       </div>
@@ -317,11 +318,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
             <span data-i18n="skills">스킬</span>
           </div>
-          <div class="card-actions">
-            <button class="icon-btn" onclick="toggleSkillEditMode()" id="btnSkillEdit" title="편집 모드">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            </button>
-          </div>
+          <div class="card-actions"></div>
         </div>
         <div id="skillsGrid" class="skills-columns"></div>
       </div>
@@ -366,33 +363,10 @@
       </div>
     </div>
 
-
   </main>
 </div>
 
 <!-- Pipeline modal removed — 자동화 등록은 입력창에서 직접 수행 -->
-
-<!-- Layout Switcher FAB -->
-<button class="layout-fab" onclick="toggleLayoutPopup()" title="레이아웃 변경">
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-</button>
-<div class="layout-popup" id="layoutPopup">
-  <div class="layout-popup-title">레이아웃</div>
-  <div class="layout-options">
-    <button class="layout-opt active" data-cols="1" onclick="setLayoutCols(1)" title="1열 (세로 배치)">
-      <div class="layout-opt-icon cols-1"><span></span><span></span><span></span></div>
-      <span class="layout-opt-label">1열</span>
-    </button>
-    <button class="layout-opt" data-cols="2" onclick="setLayoutCols(2)" title="2열 그리드">
-      <div class="layout-opt-icon cols-2"><span></span><span></span><span></span><span></span></div>
-      <span class="layout-opt-label">2열</span>
-    </button>
-    <button class="layout-opt" data-cols="3" onclick="setLayoutCols(3)" title="3열 그리드">
-      <div class="layout-opt-icon cols-3"><span></span><span></span><span></span><span></span><span></span><span></span></div>
-      <span class="layout-opt-label">3열</span>
-    </button>
-  </div>
-</div>
 
 <!-- Theme Toggle FAB -->
 <button class="theme-fab" onclick="toggleTheme()" title="테마 전환">
@@ -471,7 +445,7 @@
 
 <script>
 // 캐시 버스팅: 순서 보장 로드
-['i18n-data','i18n','utils','api','context','attachments','dirs','send','stream','job-rendering','job-actions','job-fetch','jobs','job-projects','checkpoints','pipelines','goals','skills','presets','suggestions','results','settings','app']
+['i18n-data','i18n','utils','api','context','attachments','dirs','send','stream','job-rendering','job-actions','job-fetch','jobs','job-projects','checkpoints','pipelines','goals','skills','suggestions','results','settings','app']
 .forEach(m => { const s = document.createElement('script'); s.src = m + '.js?t=' + Date.now(); s.async = false; document.body.appendChild(s); });
 </script>
 </body>

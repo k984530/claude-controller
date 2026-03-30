@@ -21,8 +21,8 @@
   --yellow-dim: rgba(251, 191, 36, 0.15);
   --blue: #60a5fa;
   --blue-dim: rgba(96, 165, 250, 0.15);
-  --radius: 8px;
-  --radius-lg: 12px;
+  --radius: 0;
+  --radius-lg: 0;
   --font: 'Noto Sans KR', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
   --transition: 0.2s ease;

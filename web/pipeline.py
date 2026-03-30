@@ -11,9 +11,10 @@ CRUD/유틸리티: pipeline_crud.py
 """
 
 import fcntl
+import json
 import time
 
-from config import DATA_DIR
+from config import DATA_DIR, SKILLS_FILE
 from jobs import send_to_fifo, get_job_result
 from pipeline_classify import classify_result
 from pipeline_context import get_git_snapshot, should_skip_dispatch, build_enriched_prompt
@@ -34,6 +35,22 @@ from pipeline_crud import (
 # ══════════════════════════════════════════════════════════════
 
 _AUTO_PAUSE_THRESHOLD = 5
+
+
+def _resolve_skill_prompts(skill_ids: list) -> str:
+    """skill_ids에 해당하는 스킬 프롬프트를 [이름] 프롬프트 형태로 합친다."""
+    if not skill_ids:
+        return ""
+    try:
+        data = json.loads(SKILLS_FILE.read_text("utf-8"))
+    except (json.JSONDecodeError, OSError, FileNotFoundError):
+        return ""
+    parts = []
+    for cat in data:
+        for skill in cat.get("skills", []):
+            if skill.get("id") in skill_ids and skill.get("prompt"):
+                parts.append(f"[{skill['name']}] {skill['prompt']}")
+    return "\n\n".join(parts)
 
 
 def dispatch(pipe_id: str, force: bool = False) -> tuple[dict | None, str | None]:
@@ -88,6 +105,10 @@ def dispatch(pipe_id: str, force: bool = False) -> tuple[dict | None, str | None
         save_pipelines(pipelines)
 
     enriched_prompt = build_enriched_prompt(pipe)
+    # 스킬 프롬프트를 실제 프롬프트 앞에 합침
+    skill_prompt = _resolve_skill_prompts(pipe.get("skill_ids", []))
+    if skill_prompt:
+        enriched_prompt = skill_prompt + "\n\n---\n\n" + enriched_prompt
     result, send_err = send_to_fifo(
         enriched_prompt,
         cwd=pipe["project_path"],

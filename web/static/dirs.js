@@ -383,10 +383,21 @@ document.addEventListener('keydown', function(e) {
   }
 
   async function _searchAndApplyFolder(folderName) {
-    // 자주 쓰는 위치에서 폴더명 검색
-    const home = '~';
-    const searchPaths = [home, '~/Desktop', '~/Documents', '~/Projects', '~/Development', '~/dev'];
-    if (dirBrowserCurrentPath) searchPaths.unshift(dirBrowserCurrentPath);
+    const searchPaths = [];
+    // 현재 CWD와 상위 경로 우선 탐색
+    const cwd = document.getElementById('cwdInput')?.value?.trim();
+    if (cwd) {
+      searchPaths.push(cwd);
+      const parent = cwd.replace(/\/[^/]+\/?$/, '');
+      if (parent && parent !== cwd) searchPaths.push(parent);
+      const grandparent = parent.replace(/\/[^/]+\/?$/, '');
+      if (grandparent && grandparent !== parent) searchPaths.push(grandparent);
+    }
+    if (dirBrowserCurrentPath) searchPaths.push(dirBrowserCurrentPath);
+    // 자주 쓰는 위치
+    searchPaths.push('~', '~/Desktop', '~/Documents', '~/Downloads',
+      '~/Projects', '~/Development', '~/dev', '~/repos', '~/src',
+      '~/code', '~/workspace', '~/workspaces');
 
     for (const base of searchPaths) {
       try {
@@ -397,11 +408,24 @@ document.addEventListener('keydown', function(e) {
           selectRecentDir(match.path, true);
           addRecentDir(match.path);
           showToast(`CWD: ${match.path}`);
-            return;
+          return;
         }
       } catch { /* 계속 */ }
     }
-    showToast(`"${folderName}" 폴더를 찾을 수 없습니다. 직접 선택해주세요.`, 'error');
+    // 서버 측 깊은 검색 (mdfind/find)
+    try {
+      const found = await apiFetch(`/api/find-dir?name=${encodeURIComponent(folderName)}`);
+      if (found && found.path) {
+        selectRecentDir(found.path, true);
+        addRecentDir(found.path);
+        showToast(`CWD: ${found.path}`);
+        return;
+      }
+    } catch { /* 서버 검색도 실패 */ }
+
+    // 최종 실패 시 디렉토리 브라우저 열기
+    showToast(`"${folderName}" 자동 검색 실패 — 직접 선택해주세요.`, 'error');
+    if (typeof toggleDirBrowser === 'function') toggleDirBrowser();
   }
 
   async function _applyDroppedPath(path) {

@@ -9,7 +9,8 @@ async function _fetchJobsCore() {
   if (_fetchJobsInFlight) return;
   _fetchJobsInFlight = true;
   try {
-    const params = new URLSearchParams({ page: _jobPage, limit: _jobLimit });
+    const params = new URLSearchParams({ limit: _jobLimit });
+    if (_jobLimit > 0) params.set('page', _jobPage);
     const data = await apiFetch(`/api/jobs?${params}`);
     if (Array.isArray(data)) {
       _jobTotal = data.length;
@@ -43,7 +44,8 @@ function goJobPage(page) {
 function _renderJobPagination() {
   let container = document.getElementById('jobPagination');
   if (!container) return;
-  if (_jobPages <= 1) {
+  // limit=0 → 전체 로드 모드 (그룹별 자체 페이지네이션 사용)
+  if (_jobLimit <= 0 || _jobPages <= 1) {
     container.innerHTML = '';
     return;
   }

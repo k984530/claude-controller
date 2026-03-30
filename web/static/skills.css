@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════
-   Skills — dynamic grid layout + edit mode
+   Skills — 카테고리 그리드 + 수정/실행 카드
    ═══════════════════════════════════════════════ */
 
 .skills-columns {
@@ -27,10 +27,6 @@
 .skills-col-name {
   flex: 1;
 }
-.skills-col-actions {
-  display: flex;
-  gap: 2px;
-}
 
 .skills-cards {
   display: flex;
@@ -38,27 +34,18 @@
   gap: 6px;
 }
 
+/* ── 스킬 카드 ── */
 .skill-card {
   position: relative;
   padding: 10px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  cursor: pointer;
-  transition: border-color var(--transition), background var(--transition), box-shadow var(--transition);
-  user-select: none;
+  transition: border-color var(--transition), background var(--transition);
 }
 .skill-card:hover {
   border-color: var(--border-light);
   background: var(--surface-hover);
-}
-.skill-card.selected {
-  border-color: var(--accent);
-  background: var(--accent-glow);
-  box-shadow: 0 0 0 1px var(--accent);
-}
-.skill-card.edit-mode {
-  cursor: default;
 }
 
 .skill-card-name {
@@ -78,57 +65,51 @@
   overflow: hidden;
 }
 
-.skill-card-check {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  border: 1.5px solid var(--border-light);
+/* ── 카드 하단 버튼 그룹 ── */
+.skill-card-btns {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all var(--transition);
-}
-.skill-card.selected .skill-card-check {
-  border-color: var(--accent);
-  background: var(--accent);
-}
-.skill-card-check svg {
-  opacity: 0;
-  transition: opacity var(--transition);
-}
-.skill-card.selected .skill-card-check svg {
-  opacity: 1;
+  gap: 4px;
+  margin-top: 8px;
 }
 
-/* ── 편집 모드 액션 버튼 ── */
-.skill-card-edit-actions {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  display: flex;
-  gap: 2px;
-}
-
-.skills-icon-btn {
+.skill-btn {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border: none;
+  gap: 3px;
+  padding: 3px 8px;
+  font-size: 0.64rem;
+  font-weight: 500;
+  font-family: var(--font);
+  border: 1px solid var(--border);
+  border-radius: 4px;
   background: transparent;
   color: var(--text-muted);
-  border-radius: 4px;
   cursor: pointer;
-  padding: 0;
-  transition: color var(--transition), background var(--transition);
+  transition: all 0.15s ease;
 }
-.skills-icon-btn:hover {
+.skill-btn:hover {
   color: var(--text);
+  border-color: var(--border-light);
   background: var(--surface-hover);
+}
+.skill-btn-edit:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-glow);
+}
+.skill-btn-run:hover {
+  color: var(--green, #22c55e);
+  border-color: var(--green, #22c55e);
+  background: rgba(34, 197, 94, 0.08);
+}
+.skill-btn-del {
+  margin-left: auto;
+  padding: 3px 5px;
+}
+.skill-btn-del:hover {
+  color: var(--red, #ef4444);
+  border-color: var(--red, #ef4444);
+  background: rgba(239, 68, 68, 0.08);
 }
 
 /* ── 스킬 추가 버튼 ── */
@@ -151,7 +132,7 @@
   color: var(--accent);
 }
 
-/* ── 빈 카드 (스킬 없음 표시) ── */
+/* ── 빈 카드 ── */
 .skill-card-empty {
   padding: 10px;
   text-align: center;
@@ -162,53 +143,65 @@
   opacity: 0.6;
 }
 
-/* ── 선택된 스킬 요약 바 ── */
-.skills-active-bar {
-  display: none;
+/* ── 실행 모달 ── */
+.skill-run-modal {
+  width: 480px;
+}
+.skill-run-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  margin-bottom: 12px;
+  display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  margin: 0 12px 10px;
-  background: var(--accent-glow);
-  border: 1px solid var(--accent);
-  border-radius: var(--radius);
+  gap: 6px;
+}
+.skill-run-subtitle {
   font-size: 0.7rem;
-  color: var(--accent);
-}
-.skills-active-bar.visible {
-  display: flex;
-}
-.skills-active-bar-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  flex: 1;
-}
-.skills-active-tag {
-  padding: 2px 8px;
-  background: var(--accent);
-  color: #fff;
-  border-radius: 10px;
-  font-size: 0.64rem;
-  font-weight: 500;
-  cursor: pointer;
-}
-.skills-active-tag:hover {
-  opacity: 0.8;
-}
-.skills-clear-btn {
-  font-size: 0.66rem;
   color: var(--text-muted);
-  cursor: pointer;
-  white-space: nowrap;
+  font-weight: 400;
 }
-.skills-clear-btn:hover {
+.skill-run-prompt {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  background: var(--bg);
+  font-family: var(--font-mono);
+  max-height: 140px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  line-height: 1.5;
+}
+.skill-run-label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+.skill-run-input {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 7px 10px;
+  font-size: 0.74rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   color: var(--text);
+  font-family: inherit;
+  box-sizing: border-box;
+}
+.skill-run-input:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 
 /* ── 스킬 편집 모달 ── */
 .skill-editor-modal {
-  width: 400px;
+  width: 480px;
 }
 .skill-editor-title {
   font-size: 0.84rem;
@@ -250,6 +243,29 @@
   margin-top: 14px;
 }
 
+/* ── 공통 버튼 ── */
+.btn-small {
+  padding: 6px 14px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  transition: opacity var(--transition);
+}
+.btn-small:hover { opacity: 0.85; }
+.btn-small.btn-muted {
+  background: transparent;
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+.btn-small.btn-muted:hover {
+  color: var(--text);
+  border-color: var(--border-light);
+}
+
 /* ── 카드 헤더 액션 ── */
 .card-actions {
   display: flex;
@@ -274,29 +290,6 @@
   border-color: var(--accent);
   color: var(--accent);
   background: var(--accent-glow);
-}
-
-/* ── 공통 버튼 ── */
-.btn-small {
-  padding: 6px 14px;
-  font-size: 0.72rem;
-  font-weight: 500;
-  border: 1px solid var(--accent);
-  border-radius: var(--radius);
-  background: var(--accent);
-  color: #fff;
-  cursor: pointer;
-  transition: opacity var(--transition);
-}
-.btn-small:hover { opacity: 0.85; }
-.btn-small.btn-muted {
-  background: transparent;
-  color: var(--text-muted);
-  border-color: var(--border);
-}
-.btn-small.btn-muted:hover {
-  color: var(--text);
-  border-color: var(--border-light);
 }
 
 /* ── Responsive ── */

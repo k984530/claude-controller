@@ -212,6 +212,10 @@ class ControllerHandler(
         if path == "/api/dirs":
             qs = parse_qs(parsed.query)
             return self._handle_dirs(qs.get("path", [os.path.expanduser("~")])[0])
+        if path == "/api/find-dir":
+            qs = parse_qs(parsed.query)
+            name = qs.get("name", [""])[0].strip()
+            return self._handle_find_dir(name)
         if path == "/api/projects":
             return self._handle_list_projects()
         if path == "/api/suggestions":

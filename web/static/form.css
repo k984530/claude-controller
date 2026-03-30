@@ -177,71 +177,25 @@
 
 /* ── Inline Directory Browser Panel  -->  dir-browser.css ── */
 
-/* ── Grid Layout System ── */
-.main[data-layout-cols="2"],
-.main[data-layout-cols="3"] {
-  display: grid;
-  gap: 0;
-  padding: 0;
-}
-.main[data-layout-cols="2"] { grid-template-columns: repeat(2, 1fr); }
-.main[data-layout-cols="3"] { grid-template-columns: repeat(3, 1fr); }
-
-/* Send Task + Job List always span full width in grid mode */
-.main[data-layout-cols="2"] #sendTask,
-.main[data-layout-cols="3"] #sendTask,
-.main[data-layout-cols="2"] #jobList,
-.main[data-layout-cols="3"] #jobList {
-  grid-column: 1 / -1;
-}
-
-/* Grid mode card adjustments: restore borders & radius */
-.main[data-layout-cols="2"] .card,
-.main[data-layout-cols="3"] .card {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  margin: 6px;
-}
-
-/* Grid mode sections need min-height for visual balance */
-.main[data-layout-cols="2"] .section,
-.main[data-layout-cols="3"] .section {
-  min-height: 180px;
-}
-
-/* Responsive: collapse to 1 col on narrow screens */
-@media (max-width: 900px) {
-  .main[data-layout-cols="2"],
-  .main[data-layout-cols="3"] {
-    grid-template-columns: 1fr;
-  }
-  .main[data-layout-cols="2"] .card,
-  .main[data-layout-cols="3"] .card {
-    border-left: none;
-    border-right: none;
-    border-radius: 0;
-    margin: 0;
-  }
-}
-
 /* ── Cards / Sections ── */
 .section {
-  animation: fadeIn 0.3s ease forwards;
-  animation-iteration-count: 1;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  margin: 0;
+  padding: 0;
 }
 
 .card {
   background: var(--surface);
-  border: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+  border-bottom: none;
   border-left: none;
   border-right: none;
   border-radius: 0;
   overflow: visible;
+}
+
+.col-left .section:last-child .card,
+.col-right .section:last-child .card {
+  border-bottom: 1px solid var(--border);
 }
 
 .card-header {

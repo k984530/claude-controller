@@ -140,6 +140,16 @@ function renderPipelines() {
     // 체이닝 표시
     const chainLabel = p.on_complete ? `<span style="font-size:0.65rem;padding:1px 5px;background:rgba(34,197,94,0.1);color:#22c55e;border-radius:3px;" title="완료 시 트리거">→ chain</span>` : '';
 
+    // 연결된 스킬 표시
+    let skillBadges = '';
+    if (p.skill_ids && p.skill_ids.length > 0) {
+      const names = p.skill_ids.map(sid => {
+        if (typeof _findSkill === 'function') { const s = _findSkill(sid); return s ? s.name : sid; }
+        return sid;
+      });
+      skillBadges = names.map(n => `<span style="font-size:0.6rem;padding:1px 5px;background:var(--accent-glow);color:var(--accent);border-radius:3px;">⚡ ${escapeHtml(n)}</span>`).join(' ');
+    }
+
     const runningBadge = isRunning ? `<span class="pipe-running-badge"><span class="pipe-running-dot"></span>실행 중</span>` : '';
     const runCount = p.run_count ? `<span style="font-size:0.65rem;color:var(--text-muted);">${p.run_count}회</span>` : '';
 
@@ -150,7 +160,7 @@ function renderPipelines() {
     return `<div class="pipeline-card${isRunning ? ' is-running' : ''}" data-pipe-id="${p.id}">
       <div class="pipeline-card-header">
         <div class="pipeline-card-title">${escapeHtml(p.name || p.id)}</div>
-        <div style="display:flex;gap:4px;align-items:center;">${runningBadge} ${intervalLabel} ${chainLabel} ${timerHtml}</div>
+        <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;">${runningBadge} ${skillBadges} ${intervalLabel} ${chainLabel} ${timerHtml}</div>
       </div>
       ${projectName ? `<div style="font-size:0.65rem;color:var(--text-muted);margin:2px 0 0 0;display:flex;align-items:center;gap:3px;" title="${escapeHtml(projectPath)}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>${escapeHtml(projectName)}</div>` : ''}
       <div class="pipeline-card-goal" style="font-size:0.75rem;color:var(--text-secondary);margin:4px 0;font-family:var(--font-mono,monospace);">${escapeHtml(cmdPreview)}</div>
@@ -236,6 +246,18 @@ async function editPipeline(pipeId) {
           <input id="${editId}_interval" type="text" value="${escapeHtml(data.interval || '')}" placeholder="예: 1m"
             style="width:120px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-secondary);color:var(--text-primary);font-size:0.8rem;">
         </div>
+        <div style="margin-bottom:12px;">
+          <label style="font-size:0.72rem;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">스킬 연결</label>
+          <div id="${editId}_skills" style="display:flex;flex-wrap:wrap;gap:4px;font-size:0.7rem;">
+            ${(typeof _skillCategories !== 'undefined' ? _skillCategories : []).flatMap(cat => (cat.skills || []).map(sk => {
+              const checked = (data.skill_ids || []).includes(sk.id);
+              return `<label style="display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border:1px solid var(--border);cursor:pointer;${checked ? 'background:var(--accent-glow);border-color:var(--accent);' : ''}">
+                <input type="checkbox" value="${escapeHtml(sk.id)}" ${checked ? 'checked' : ''} style="width:12px;height:12px;margin:0;">
+                <span>${escapeHtml(sk.name)}</span>
+              </label>`;
+            })).join('')}
+          </div>
+        </div>
         <div style="font-size:0.7rem;color:var(--text-muted);display:flex;gap:12px;">
           <span>경로: <code>${escapeHtml(data.project_path)}</code></span>
           ${data.run_count ? `<span>${data.run_count}회 실행</span>` : ''}
@@ -261,12 +283,16 @@ async function _savePipelineEdit(pipeId, editId, btn) {
   const interval = document.getElementById(editId + '_interval').value.trim();
   if (!command) { showToast('명령어를 입력하세요', 'error'); return; }
 
+  // 체크된 스킬 수집
+  const skillChecks = document.querySelectorAll(`#${editId}_skills input[type="checkbox"]:checked`);
+  const skill_ids = [...skillChecks].map(cb => cb.value);
+
   btn.disabled = true;
   btn.textContent = '저장 중...';
   try {
     await apiFetch(`/api/pipelines/${encodeURIComponent(pipeId)}/update`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, command, interval }),
+      body: JSON.stringify({ name, command, interval, skill_ids }),
     });
     showToast('자동화 수정 완료');
     btn.closest('.settings-overlay').remove();

@@ -36,8 +36,18 @@ class JobHandlerMixin:
     def _handle_jobs(self, cwd_filter=None, page=1, limit=10):
         all_jobs = self._jobs_mod().get_all_jobs(cwd_filter=cwd_filter)
         total = len(all_jobs)
+        # limit=0 → 전체 반환 (프론트엔드 그룹 뷰에서 자체 페이지네이션 사용)
+        if limit <= 0:
+            self._json_response({
+                "jobs": all_jobs,
+                "total": total,
+                "page": 1,
+                "limit": total or 1,
+                "pages": 1,
+            })
+            return
         page = max(1, page)
-        limit = max(1, min(limit, 100))
+        limit = max(1, min(limit, 500))
         pages = max(1, (total + limit - 1) // limit)
         page = min(page, pages)
         start = (page - 1) * limit

@@ -1,12 +1,10 @@
 /* ═══════════════════════════════════════════════
    Skills — 고정 카테고리 + 스킬 CRUD
    카테고리: 기획, 개발, 디자인, 검증, 기타 (고정)
-   사용자는 각 카테고리 내 스킬만 관리
+   각 스킬 카드에 수정/실행 버튼 제공
    ═══════════════════════════════════════════════ */
 
 let _skillCategories = [];
-let _selectedSkills = new Set();
-let _skillEditMode = false;
 
 const _FIXED_CATEGORIES = [
   { id: 'plan',   name: '기획',  color: 'accent' },
@@ -54,19 +52,6 @@ async function _saveSkills() {
   }
 }
 
-/* ── 편집 모드 토글 ── */
-
-function toggleSkillEditMode() {
-  _skillEditMode = !_skillEditMode;
-  const btn = document.getElementById('btnSkillEdit');
-  if (btn) {
-    btn.style.cssText = _skillEditMode
-      ? 'border-color:var(--accent);color:var(--accent);background:rgba(99,102,241,0.1);'
-      : '';
-  }
-  _renderSkillsSection();
-}
-
 /* ── 렌더링 ── */
 
 function _renderSkillsSection() {
@@ -79,93 +64,147 @@ function _renderSkillsSection() {
         <span class="skills-col-name">${escapeHtml(cat.name)}</span>
       </div>
       <div class="skills-cards">
-        ${cat.skills.length === 0 && !_skillEditMode ? `
+        ${cat.skills.length === 0 ? `
           <div class="skill-card-empty">스킬 없음</div>
         ` : ''}
         ${cat.skills.map((s, si) => _renderSkillCard(s, ci, si)).join('')}
-        ${_skillEditMode ? `
-          <button class="skill-add-btn" onclick="addSkill(${ci})">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            스킬 추가
-          </button>
-        ` : ''}
+        <button class="skill-add-btn" onclick="addSkill(${ci})">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          스킬 추가
+        </button>
       </div>
     </div>
   `).join('');
-
-  _updateSkillsBar();
 }
 
 function _renderSkillCard(skill, catIdx, skillIdx) {
-  const selected = _selectedSkills.has(skill.id);
   return `
-    <div class="skill-card${selected ? ' selected' : ''}${_skillEditMode ? ' edit-mode' : ''}"
-         data-skill-id="${skill.id}"
-         onclick="${_skillEditMode ? '' : `toggleSkill('${skill.id}')`}">
-      ${!_skillEditMode ? `
-        <div class="skill-card-check">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
-        </div>
-      ` : `
-        <div class="skill-card-edit-actions">
-          <button class="skills-icon-btn" onclick="event.stopPropagation();editSkill(${catIdx},${skillIdx})" title="수정">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          </button>
-          <button class="skills-icon-btn" onclick="event.stopPropagation();deleteSkill(${catIdx},${skillIdx})" title="삭제">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
-          </button>
-        </div>
-      `}
+    <div class="skill-card">
       <div class="skill-card-name">${escapeHtml(skill.name)}</div>
       <div class="skill-card-desc">${escapeHtml(skill.desc || '')}</div>
+      <div class="skill-card-btns">
+        <button class="skill-btn skill-btn-edit" onclick="editSkill(${catIdx},${skillIdx})" title="수정">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          수정
+        </button>
+        <button class="skill-btn skill-btn-run" onclick="runSkill(${catIdx},${skillIdx})" title="실행">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          실행
+        </button>
+        <button class="skill-btn skill-btn-del" onclick="deleteSkill(${catIdx},${skillIdx})" title="삭제">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
     </div>
   `;
 }
 
-/* ── 스킬 선택 (전송 시 system_prompt 주입) ── */
+/* ── 실행 모달 (프로젝트 + 시간 입력) ── */
 
-function toggleSkill(skillId) {
-  if (_selectedSkills.has(skillId)) {
-    _selectedSkills.delete(skillId);
-  } else {
-    _selectedSkills.add(skillId);
-  }
-  _renderSkillsSection();
+function runSkill(catIdx, skillIdx) {
+  const cat = _skillCategories[catIdx];
+  if (!cat) return;
+  const skill = cat.skills[skillIdx];
+  if (!skill) return;
+  _showSkillRunModal(skill);
 }
 
-function clearSkillSelection() {
-  _selectedSkills.clear();
-  _renderSkillsSection();
-}
+async function _showSkillRunModal(skill) {
+  const prev = document.getElementById('skillRunOverlay');
+  if (prev) prev.remove();
 
-function _updateSkillsBar() {
-  let bar = document.getElementById('skillsActiveBar');
-  if (!bar) {
-    const section = document.getElementById('skillsGrid');
-    if (!section) return;
-    bar = document.createElement('div');
-    bar.id = 'skillsActiveBar';
-    bar.className = 'skills-active-bar';
-    section.parentElement.insertBefore(bar, section);
+  let recentDirs = [];
+  try { recentDirs = await apiFetch('/api/recent-dirs'); } catch {}
+  if (!Array.isArray(recentDirs)) recentDirs = [];
+
+  let projects = [];
+  try { projects = await apiFetch('/api/projects'); } catch {}
+  if (!Array.isArray(projects)) projects = [];
+
+  const allPaths = [];
+  const seen = new Set();
+  for (const p of projects) {
+    const pp = p.path || p.project_path || '';
+    if (pp && !seen.has(pp)) { seen.add(pp); allPaths.push({ path: pp, label: p.name || pp.split('/').pop(), type: 'project' }); }
+  }
+  for (const d of recentDirs) {
+    const dp = typeof d === 'string' ? d : (d.path || '');
+    if (dp && !seen.has(dp)) { seen.add(dp); allPaths.push({ path: dp, label: dp.split('/').pop(), type: 'recent' }); }
   }
 
-  if (_selectedSkills.size === 0) {
-    bar.classList.remove('visible');
+  const optionsHtml = allPaths.map(p =>
+    `<option value="${escapeHtml(p.path)}">${escapeHtml(p.label)} (${p.type === 'project' ? '프로젝트' : '최근'})</option>`
+  ).join('');
+
+  const overlay = document.createElement('div');
+  overlay.id = 'skillRunOverlay';
+  overlay.className = 'editor-overlay';
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+  overlay.innerHTML = `
+    <div class="editor-modal skill-run-modal">
+      <div class="skill-run-title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        <span>${escapeHtml(skill.name)}</span>
+        <span class="skill-run-subtitle">실행</span>
+      </div>
+      <div class="skill-run-prompt">${escapeHtml(skill.prompt || '(프롬프트 없음)')}</div>
+      <label class="skill-run-label">
+        프로젝트
+        <select id="skillRunProject" class="skill-run-input">
+          <option value="">선택하세요</option>
+          ${optionsHtml}
+        </select>
+      </label>
+      <label class="skill-run-label">
+        실행 주기 (선택)
+        <input type="text" id="skillRunInterval" class="skill-run-input" placeholder="예: 30m, 1h, 매일 09:00" />
+      </label>
+      <div class="skill-editor-actions">
+        <button class="btn-small btn-muted" onclick="this.closest('.editor-overlay').remove()">취소</button>
+        <button class="btn-small" onclick="_execSkillRun('${escapeHtml(escapeJsStr(skill.id))}')">실행</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
+async function _execSkillRun(skillId) {
+  const projectPath = document.getElementById('skillRunProject').value;
+  const interval = document.getElementById('skillRunInterval').value.trim();
+
+  if (!projectPath) {
+    showToast('프로젝트를 선택하세요', 'error');
     return;
   }
 
-  const tags = [];
-  for (const sid of _selectedSkills) {
-    const skill = _findSkill(sid);
-    if (skill) tags.push(`<span class="skills-active-tag" onclick="toggleSkill('${sid}')" title="클릭하여 해제">${escapeHtml(skill.name)}</span>`);
+  const skill = _findSkill(skillId);
+  if (!skill || !skill.prompt) {
+    showToast('스킬 프롬프트가 없습니다', 'error');
+    return;
   }
 
-  bar.innerHTML = `
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/></svg>
-    <div class="skills-active-bar-tags">${tags.join('')}</div>
-    <span class="skills-clear-btn" onclick="clearSkillSelection()">전체 해제</span>
-  `;
-  bar.classList.add('visible');
+  const overlay = document.getElementById('skillRunOverlay');
+  if (overlay) overlay.remove();
+
+  try {
+    const pipeBody = {
+      project_path: projectPath,
+      command: skill.prompt,
+      name: skill.name,
+      skill_ids: [skillId],
+    };
+    if (interval) pipeBody.interval = interval;
+
+    const pipe = await apiFetch('/api/pipelines', {
+      method: 'POST',
+      body: JSON.stringify(pipeBody),
+    });
+    showToast(`실행 등록: ${pipe.name || pipe.id}`);
+    if (typeof fetchPipelines === 'function') fetchPipelines();
+    if (typeof runPipeline === 'function') runPipeline(pipe.id);
+  } catch (err) {
+    showToast(`실행 실패: ${err.message}`, 'error');
+  }
 }
 
 function _findSkill(skillId) {
@@ -174,17 +213,6 @@ function _findSkill(skillId) {
     if (s) return s;
   }
   return null;
-}
-
-/** 전송 시 선택된 스킬의 프롬프트를 결합하여 반환 */
-function getSkillSystemPrompt() {
-  if (_selectedSkills.size === 0) return '';
-  const parts = [];
-  for (const sid of _selectedSkills) {
-    const skill = _findSkill(sid);
-    if (skill && skill.prompt) parts.push(`[${skill.name}] ${skill.prompt}`);
-  }
-  return parts.join('\n\n');
 }
 
 /* ── CRUD: 스킬 ── */
@@ -204,13 +232,12 @@ function deleteSkill(catIdx, skillIdx) {
   if (!skill) return;
   if (!confirm(`"${skill.name}" 스킬을 삭제하시겠습니까?`)) return;
 
-  _selectedSkills.delete(skill.id);
   cat.skills.splice(skillIdx, 1);
   _saveSkills();
   _renderSkillsSection();
 }
 
-/* ── 스킬 편집 모달 ── */
+/* ── 스킬 편집 모달 (프롬프트 전문 표시) ── */
 
 function _openSkillEditor(catIdx, skillIdx) {
   const cat = _skillCategories[catIdx];
@@ -232,8 +259,8 @@ function _openSkillEditor(catIdx, skillIdx) {
       <label>설명
         <input type="text" id="skillEdDesc" value="${escapeHtml(skill.desc)}" placeholder="짧은 설명 (선택)" />
       </label>
-      <label>시스템 프롬프트
-        <textarea id="skillEdPrompt" rows="5" placeholder="이 스킬 선택 시 주입될 시스템 프롬프트">${escapeHtml(skill.prompt)}</textarea>
+      <label>프롬프트
+        <textarea id="skillEdPrompt" rows="12" placeholder="이 스킬의 전체 프롬프트">${escapeHtml(skill.prompt)}</textarea>
       </label>
       <div class="skill-editor-actions">
         <button class="btn-small btn-muted" onclick="document.getElementById('skillEditorOverlay').remove()">취소</button>
