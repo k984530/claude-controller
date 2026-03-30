@@ -45,6 +45,7 @@ from handler_fs import FsHandlerMixin
 from handler_crud import ProjectHandlerMixin, PipelineHandlerMixin
 from handler_suggestions import SuggestionHandlerMixin
 from handler_presets import PresetHandlerMixin
+from handler_goals import GoalHandlerMixin
 
 # ── 사전 컴파일된 파라미터 라우팅 테이블 ──
 _GET_PARAM_ROUTES = [
@@ -58,6 +59,7 @@ _GET_PARAM_ROUTES = [
     (re.compile(r"^/api/jobs/(\w+)/diff$"), "_handle_job_diff"),
     (re.compile(r"^/api/session/([a-f0-9-]+)/job$"), "_handle_job_by_session"),
     (re.compile(r"^/api/presets/([^/]+)$"), "_handle_get_preset"),
+    (re.compile(r"^/api/goals/([^/]+)$"), "_handle_get_goal"),
 ]
 
 _POST_PARAM_ROUTES = [
@@ -70,6 +72,8 @@ _POST_PARAM_ROUTES = [
     (re.compile(r"^/api/projects/([^/]+)$"), "_handle_update_project"),
     (re.compile(r"^/api/jobs/(\w+)/rewind$"), "_handle_job_rewind"),
     (re.compile(r"^/api/presets/([^/]+)$"), "_handle_update_preset"),
+    (re.compile(r"^/api/goals/([^/]+)/update$"), "_handle_update_goal"),
+    (re.compile(r"^/api/goals/([^/]+)/execute$"), "_handle_execute_goal"),
 ]
 
 _DELETE_PARAM_ROUTES = [
@@ -78,6 +82,7 @@ _DELETE_PARAM_ROUTES = [
     (re.compile(r"^/api/projects/([^/]+)$"), "_handle_remove_project"),
     (re.compile(r"^/api/jobs/(\w+)$"), "_handle_delete_job"),
     (re.compile(r"^/api/presets/([^/]+)$"), "_handle_delete_preset"),
+    (re.compile(r"^/api/goals/([^/]+)$"), "_handle_cancel_goal"),
 ]
 
 # 핫 리로드 대상 모듈
@@ -100,6 +105,7 @@ class ControllerHandler(
     PipelineHandlerMixin,
     SuggestionHandlerMixin,
     PresetHandlerMixin,
+    GoalHandlerMixin,
     ResponseMixin,
     SecurityMixin,
     StaticServeMixin,
@@ -212,6 +218,8 @@ class ControllerHandler(
             return self._handle_list_suggestions(parsed)
         if path == "/api/presets":
             return self._handle_list_presets()
+        if path == "/api/goals":
+            return self._handle_list_goals(parsed)
         if path == "/api/pipelines":
             return self._handle_list_pipelines()
         if path == "/api/pipelines/evolution":
@@ -283,6 +291,8 @@ class ControllerHandler(
             return self._handle_clear_dismissed()
         if path == "/api/presets":
             return self._handle_create_preset()
+        if path == "/api/goals":
+            return self._handle_create_goal()
         if path == "/api/pipelines":
             return self._handle_create_pipeline()
         if path == "/api/pipelines/tick-all":
