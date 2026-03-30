@@ -38,6 +38,39 @@ if [[ -f "$LOG_FILE" ]]; then
   fi
 fi
 
+# ── 위험 수준 태깅 ──
+LEVEL="INFO"
+if echo "$CMD" | grep -qE '(rm\s+-r|git\s+reset|git\s+clean|kill|pkill|chmod|chown)'; then
+  LEVEL="WARN"
+fi
+if echo "$CMD" | grep -qE '(sudo|mkfs|dd\s+if=|>\s*/etc/|eval\s+\$)'; then
+  LEVEL="CRIT"
+fi
+
+# ── 세션 컨텍스트 ──
+SESSION_ID="${CLAUDE_SESSION_ID:-unknown}"
+
+# ── 실행 시간 추적 ──
+DURATION_FILE="/tmp/.controller-cmd-start-${SESSION_ID}"
+DURATION=""
+if [[ -f "$DURATION_FILE" ]]; then
+  START_TS=$(cat "$DURATION_FILE" 2>/dev/null || echo 0)
+  END_TS=$(date +%s)
+  ELAPSED=$((END_TS - START_TS))
+  if (( ELAPSED > 0 && ELAPSED < 3600 )); then
+    DURATION=" [${ELAPSED}s]"
+  fi
+  rm -f "$DURATION_FILE"
+fi
+# 다음 명령의 시작 시간 기록
+date +%s > "$DURATION_FILE"
+
+# ── 세션 카운터 ──
+COUNT_FILE="/tmp/.controller-cmd-count-${SESSION_ID}"
+CMD_COUNT=$(cat "$COUNT_FILE" 2>/dev/null || echo 0)
+CMD_COUNT=$((CMD_COUNT + 1))
+echo "$CMD_COUNT" > "$COUNT_FILE"
+
 # ── 로그 기록 ──
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-echo "[$TIMESTAMP] $CMD" >> "$LOG_FILE"
+echo "[$TIMESTAMP] [$LEVEL] [sid:$SESSION_ID] [#${CMD_COUNT}]${DURATION} $CMD" >> "$LOG_FILE"
