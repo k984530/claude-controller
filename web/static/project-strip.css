@@ -1,0 +1,137 @@
+/* ── Project Strip & Chips ── */
+.project-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 0 10px 18px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.project-strip::after {
+  content: '';
+  flex-shrink: 0;
+  width: 18px;
+}
+.project-strip::-webkit-scrollbar { display: none; }
+.project-strip:empty { display: none; }
+
+.project-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.project-chip:hover {
+  background: var(--surface-hover);
+  border-color: var(--text-muted);
+}
+
+.project-chip.active {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.pchip-icon {
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+
+.project-chip.active .pchip-icon {
+  opacity: 1;
+}
+
+.pchip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--blue);
+  animation: pulse 1.5s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.pchip-name {
+  font-family: var(--font-mono);
+}
+
+.pchip-count {
+  font-size: 0.66rem;
+  font-family: var(--font-mono);
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text-muted);
+  font-weight: 600;
+  min-width: 18px;
+  text-align: center;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.project-chip.active .pchip-count {
+  background: var(--accent);
+  color: var(--surface);
+}
+
+.pchip-stat {
+  font-size: 0.62rem;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 8px;
+  min-width: 14px;
+  text-align: center;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pchip-stat-running {
+  background: var(--blue-dim);
+  color: var(--blue);
+}
+
+.pchip-stat-done {
+  background: var(--green-dim);
+  color: var(--green);
+}
+
+.pchip-stat-failed {
+  background: var(--red-dim);
+  color: var(--red);
+}
+
+/* ── Registered Project Badge ── */
+.project-chip.registered {
+  border-style: solid;
+  border-width: 1.5px;
+}
+
+.pchip-reg {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+.project-chip.registered .pchip-icon {
+  opacity: 0.8;
+}

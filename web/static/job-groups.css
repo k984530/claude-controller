@@ -1,0 +1,126 @@
+/* ── Job Group View ── */
+.job-group-row { cursor: pointer; }
+.job-group-row:hover td { background: var(--surface-hover); }
+
+.job-group-cell {
+  padding: 12px 18px !important;
+  background: var(--surface) !important;
+  border-bottom: 1px solid var(--border) !important;
+}
+
+.job-group-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.job-group-chevron {
+  transition: transform 0.2s ease;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.job-group-chevron.collapsed { transform: rotate(-90deg); }
+
+.job-group-folder {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.job-group-name {
+  font-weight: 600;
+  font-size: 0.82rem;
+  color: var(--text);
+  font-family: var(--font-mono);
+}
+
+.job-group-count {
+  font-size: 0.68rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+
+.job-group-stats {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.grp-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.grp-stat-running { background: var(--blue-dim); color: var(--blue); }
+.grp-stat-done { background: var(--green-dim); color: var(--green); }
+.grp-stat-failed { background: var(--red-dim); color: var(--red); }
+
+.grp-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--blue);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.job-group-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 8px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+}
+
+.grp-meta {
+  font-size: 0.66rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.grp-meta-dur { color: var(--text-muted); }
+.grp-meta-rate-ok { color: var(--green); }
+.grp-meta-rate-warn { color: var(--red); }
+
+.job-group-item td:first-child { padding-left: 36px; }
+
+/* ── Group Pagination ── */
+.grp-pg-row td { padding: 0 !important; border: none !important; }
+.grp-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 16px 8px 36px;
+  background: var(--surface);
+}
+.grp-pg-info {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono, monospace);
+  min-width: 70px;
+  text-align: center;
+}
+.pg-btn-sm {
+  min-width: 24px;
+  height: 24px;
+  font-size: 0.75rem;
+  padding: 0 6px;
+}
+
+#btnViewMode.active {
+  background: var(--accent-glow);
+  color: var(--accent);
+  border-color: var(--accent);
+}
