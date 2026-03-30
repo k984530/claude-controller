@@ -11,7 +11,7 @@ File System & Config HTTP 핸들러 Mixin
 import json
 import os
 
-from config import DATA_DIR, SETTINGS_FILE, RECENT_DIRS_FILE
+from config import DATA_DIR, SETTINGS_FILE, SKILLS_FILE, RECENT_DIRS_FILE
 
 
 class FsHandlerMixin:
@@ -65,6 +65,52 @@ class FsHandlerMixin:
             self._json_response({"ok": True, "config": current})
         except OSError as e:
             self._error_response(f"설정 저장 실패: {e}", 500, code="CONFIG_SAVE_FAILED")
+
+    def _handle_get_skills(self):
+        try:
+            if SKILLS_FILE.exists():
+                data = json.loads(SKILLS_FILE.read_text("utf-8"))
+            else:
+                data = []
+            self._json_response(data)
+        except (json.JSONDecodeError, OSError):
+            self._json_response([])
+
+    def _handle_save_skills(self):
+        body = self._read_body(allow_list=True)
+        if not isinstance(body, list):
+            return self._error_response("카테고리 배열이 필요합니다", code="MISSING_FIELD")
+
+        # 구조 검증: [{id, name, color, skills: [{id, name, desc, prompt}]}]
+        sanitized = []
+        for cat in body:
+            if not isinstance(cat, dict) or not cat.get("id") or not cat.get("name"):
+                continue
+            skills = []
+            for s in cat.get("skills", []):
+                if not isinstance(s, dict) or not s.get("id") or not s.get("name"):
+                    continue
+                skills.append({
+                    "id": str(s["id"]),
+                    "name": str(s["name"]),
+                    "desc": str(s.get("desc", "")),
+                    "prompt": str(s.get("prompt", "")),
+                })
+            sanitized.append({
+                "id": str(cat["id"]),
+                "name": str(cat["name"]),
+                "color": str(cat.get("color", "accent")),
+                "skills": skills,
+            })
+
+        try:
+            DATA_DIR.mkdir(parents=True, exist_ok=True)
+            SKILLS_FILE.write_text(
+                json.dumps(sanitized, ensure_ascii=False, indent=2), "utf-8"
+            )
+            self._json_response({"ok": True, "skills": sanitized})
+        except OSError as e:
+            self._error_response(f"스킬 저장 실패: {e}", 500, code="SKILLS_SAVE_FAILED")
 
     def _handle_get_recent_dirs(self):
         try:

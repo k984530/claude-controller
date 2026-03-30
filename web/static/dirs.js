@@ -135,12 +135,6 @@ async function browseTo(path) {
     currentDisplay.textContent = data.current;
     currentDisplay.title = data.current;
 
-    document.getElementById('cwdInput').value = data.current;
-    document.getElementById('dirPickerText').textContent = data.current;
-    document.getElementById('dirPickerDisplay').classList.add('has-value');
-    document.getElementById('dirPickerClear').classList.add('visible');
-    renderRecentDirs();
-
     renderBreadcrumb(data.current, breadcrumb);
 
     const dirs = data.entries.filter(e => e.type === 'dir');
@@ -244,3 +238,210 @@ document.addEventListener('keydown', function(e) {
     closeDirBrowser();
   }
 });
+
+// ── 폴더 드래그 & 드롭 → CWD 설정 ──
+
+(function() {
+  const dirPicker = document.querySelector('.dir-picker');
+  const promptWrapper = document.getElementById('promptWrapper');
+  if (!dirPicker) return;
+
+  // dirPicker에만 드래그 호버 표시, 드롭은 실제 폴더만 처리
+  dirPicker.addEventListener('dragover', function(e) {
+    if (_hasFolderInDrag(e)) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'link';
+      dirPicker.classList.add('dir-drop-hover');
+    }
+  });
+
+  dirPicker.addEventListener('dragleave', function(e) {
+    if (e.currentTarget === dirPicker) {
+      dirPicker.classList.remove('dir-drop-hover');
+    }
+  });
+
+  dirPicker.addEventListener('drop', function(e) {
+    dirPicker.classList.remove('dir-drop-hover');
+
+    // 실제 폴더 드롭만 처리 — 파일은 app.js의 sendTask 핸들러로 위임
+    if (!_isActualFolderDrop(e)) return;
+
+    e.preventDefault();
+    const path = _extractPathFromDrop(e);
+    if (path) {
+      _applyDroppedPath(path);
+      return;
+    }
+
+    const folderName = _extractFolderName(e);
+    if (folderName) {
+      _searchAndApplyFolder(folderName);
+    }
+  });
+
+  function _hasFolderInDrag(e) {
+    if (!e.dataTransfer) return false;
+    return e.dataTransfer.types.indexOf('Files') !== -1
+      || e.dataTransfer.types.indexOf('public.file-url') !== -1;
+  }
+
+  function _isActualFolderDrop(e) {
+    if (!e.dataTransfer) return false;
+    // webkitGetAsEntry로 실제 디렉토리인지 확인
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      const item = e.dataTransfer.items[0];
+      if (item.webkitGetAsEntry) {
+        const entry = item.webkitGetAsEntry();
+        return entry && entry.isDirectory;
+      }
+    }
+    // File 객체 힌트: type 없고 size 0이면 폴더일 가능성
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const file = e.dataTransfer.files[0];
+      return !file.type && file.size === 0;
+    }
+    return false;
+  }
+
+  function _extractPathFromDrop(e) {
+    if (!e.dataTransfer) return null;
+
+    // 1) text/uri-list에서 file:// URL 추출 (macOS Finder + Safari)
+    for (const type of ['text/uri-list', 'URL', 'text/plain', 'public.file-url']) {
+      try {
+        const data = e.dataTransfer.getData(type);
+        if (data) {
+          const path = _parseFileUrl(data);
+          if (path) return path;
+        }
+      } catch { /* 무시 */ }
+    }
+
+    // 2) DataTransferItem으로 디렉토리 판별 + 이름 추출
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      const item = e.dataTransfer.items[0];
+      if (item.webkitGetAsEntry) {
+        const entry = item.webkitGetAsEntry();
+        if (entry && entry.isDirectory) {
+          // 이름만 알 수 있음 — 파일 객체에서 추가 정보 시도
+          const file = e.dataTransfer.files[0];
+          if (file && file.path) return file.path; // Electron 환경
+          // 브라우저 환경: 이름만으로 서버에 질의
+          return null; // _applyDroppedPath에서 처리 안됨, 아래 files 폴백으로
+        }
+      }
+    }
+
+    // 3) File 객체의 path (Electron 등)
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const file = e.dataTransfer.files[0];
+      if (file.path) return file.path;
+    }
+
+    return null;
+  }
+
+  function _parseFileUrl(data) {
+    // 여러 줄일 수 있음 (text/uri-list 형식)
+    const lines = data.split(/[\r\n]+/).filter(l => l && !l.startsWith('#'));
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('file://')) {
+        // file:///path/to/folder → /path/to/folder
+        try {
+          const url = new URL(trimmed);
+          return decodeURIComponent(url.pathname);
+        } catch {
+          return decodeURIComponent(trimmed.replace(/^file:\/\//, ''));
+        }
+      }
+      // 슬래시로 시작하는 절대 경로
+      if (trimmed.startsWith('/') && !trimmed.includes('\t')) {
+        return trimmed;
+      }
+    }
+    return null;
+  }
+
+  function _extractFolderName(e) {
+    if (!e.dataTransfer) return null;
+    // webkitGetAsEntry로 디렉토리 이름 추출
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      const item = e.dataTransfer.items[0];
+      if (item.webkitGetAsEntry) {
+        const entry = item.webkitGetAsEntry();
+        if (entry && entry.isDirectory) return entry.name;
+      }
+    }
+    // File 객체에서 디렉토리 힌트 (type 비어있고 size 0이면 폴더일 가능성)
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const file = e.dataTransfer.files[0];
+      if (!file.type && file.size === 0 && file.name) return file.name;
+    }
+    return null;
+  }
+
+  async function _searchAndApplyFolder(folderName) {
+    // 자주 쓰는 위치에서 폴더명 검색
+    const home = '~';
+    const searchPaths = [home, '~/Desktop', '~/Documents', '~/Projects', '~/Development', '~/dev'];
+    if (dirBrowserCurrentPath) searchPaths.unshift(dirBrowserCurrentPath);
+
+    for (const base of searchPaths) {
+      try {
+        const data = await apiFetch(`/api/dirs?path=${encodeURIComponent(base)}`);
+        if (!data || !data.entries) continue;
+        const match = data.entries.find(e => e.type === 'dir' && e.name === folderName);
+        if (match) {
+          selectRecentDir(match.path, true);
+          addRecentDir(match.path);
+          showToast(`CWD: ${match.path}`);
+            return;
+        }
+      } catch { /* 계속 */ }
+    }
+    showToast(`"${folderName}" 폴더를 찾을 수 없습니다. 직접 선택해주세요.`, 'error');
+  }
+
+  async function _applyDroppedPath(path) {
+    // 서버에서 디렉토리인지 확인
+    try {
+      const data = await apiFetch(`/api/dirs?path=${encodeURIComponent(path)}`);
+      if (data && data.current) {
+        selectRecentDir(data.current, true);
+        addRecentDir(data.current);
+        showToast(`CWD: ${data.current}`);
+      }
+    } catch {
+      // 디렉토리가 아니거나 접근 불가 — 상위 디렉토리 시도
+      const parent = path.replace(/\/[^/]+\/?$/, '') || '/';
+      try {
+        const data = await apiFetch(`/api/dirs?path=${encodeURIComponent(parent)}`);
+        if (data && data.current) {
+          selectRecentDir(data.current, true);
+          addRecentDir(data.current);
+          showToast(`CWD: ${data.current}`);
+          }
+      } catch {
+        showToast('경로를 인식할 수 없습니다', 'error');
+      }
+    }
+  }
+
+  // 외부(app.js 등)에서 프롬프트 영역 폴더 드롭을 CWD로 위임할 수 있도록 노출
+  window.handleFolderDrop = function(e) {
+    if (!_isActualFolderDrop(e)) return false;
+    const path = _extractPathFromDrop(e);
+    if (path) {
+      _applyDroppedPath(path);
+      return true;
+    }
+    const folderName = _extractFolderName(e);
+    if (folderName) {
+      _searchAndApplyFolder(folderName);
+      return true;
+    }
+    return false;
+  };
+})();

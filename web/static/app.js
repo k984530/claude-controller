@@ -16,6 +16,46 @@
    12. app.js       — 초기화 (이 파일)
    ═══════════════════════════════════════════════ */
 
+/* ── Layout Grid System ── */
+function applyLayout(cols) {
+  const main = document.querySelector('.main');
+  if (!main) return;
+  cols = Math.max(1, Math.min(3, parseInt(cols) || 1));
+  if (cols === 1) {
+    main.removeAttribute('data-layout-cols');
+  } else {
+    main.setAttribute('data-layout-cols', cols);
+  }
+  // Update active button
+  document.querySelectorAll('.layout-opt').forEach(btn => {
+    btn.classList.toggle('active', parseInt(btn.dataset.cols) === cols);
+  });
+}
+
+function setLayoutCols(cols) {
+  localStorage.setItem('layout_cols', cols);
+  applyLayout(cols);
+  closeLayoutPopup();
+}
+
+function toggleLayoutPopup() {
+  const popup = document.getElementById('layoutPopup');
+  popup.classList.toggle('open');
+}
+
+function closeLayoutPopup() {
+  document.getElementById('layoutPopup')?.classList.remove('open');
+}
+
+// Close layout popup when clicking outside
+document.addEventListener('click', function(e) {
+  const popup = document.getElementById('layoutPopup');
+  const fab = document.querySelector('.layout-fab');
+  if (popup?.classList.contains('open') && !popup.contains(e.target) && !fab?.contains(e.target)) {
+    closeLayoutPopup();
+  }
+});
+
 async function autoConnect() {
   const isSameOrigin = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
 
@@ -38,19 +78,21 @@ async function autoConnect() {
 async function init() {
   applyI18n();
   applyTheme(localStorage.getItem('theme') || 'dark');
+  applyLayout(localStorage.getItem('layout_cols') || '1');
   await autoConnect();
   loadRecentDirs();
-  fetchPersonas();
   fetchPipelines();
   checkStatus();
   fetchRegisteredProjects();
   fetchJobs();
   fetchStats();
+  loadResults();
   _applyJobListCollapse();
   requestNotificationPermission();
 
   jobPollTimer = setInterval(fetchJobs, 3000);
   setInterval(fetchStats, 15000);
+  setInterval(loadResults, 30000);
   setInterval(fetchRegisteredProjects, 30000);
   setInterval(checkStatus, 10000);
 
@@ -67,6 +109,22 @@ async function init() {
     const mirror = document.getElementById('promptMirror');
     if (mirror) mirror.scrollTop = this.scrollTop;
   });
+
+  // ── 폴더 드롭 감지 헬퍼 ──
+  function _isDirectoryDrop(e) {
+    if (!e.dataTransfer || !e.dataTransfer.items || e.dataTransfer.items.length === 0) return false;
+    const item = e.dataTransfer.items[0];
+    if (item.webkitGetAsEntry) {
+      const entry = item.webkitGetAsEntry();
+      if (entry && entry.isDirectory) return true;
+    }
+    // File 객체 힌트: type 없고 size 0이면 폴더일 가능성
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const file = e.dataTransfer.files[0];
+      if (!file.type && file.size === 0) return true;
+    }
+    return false;
+  }
 
   // ── File Drag & Drop ──
   const wrapper = document.getElementById('promptWrapper');
@@ -96,6 +154,11 @@ async function init() {
     e.preventDefault();
     dragCounter = 0;
     wrapper.classList.remove('drag-over');
+    if (_isDirectoryDrop(e)) {
+      // 폴더 드롭 → CWD 설정으로 위임 (dirs.js)
+      if (typeof handleFolderDrop === 'function') handleFolderDrop(e);
+      return;
+    }
     if (e.dataTransfer.files.length > 0) {
       handleFiles(e.dataTransfer.files);
     }
@@ -103,6 +166,11 @@ async function init() {
 
   document.addEventListener('dragover', function(e) { e.preventDefault(); });
   document.addEventListener('drop', function(e) {
+    if (_isDirectoryDrop(e)) {
+      e.preventDefault();
+      if (typeof handleFolderDrop === 'function') handleFolderDrop(e);
+      return;
+    }
     if (e.dataTransfer.files.length > 0) {
       e.preventDefault();
       handleFiles(e.dataTransfer.files);

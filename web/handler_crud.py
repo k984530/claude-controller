@@ -1,51 +1,7 @@
 """CRUD HTTP 핸들러 — Mixin
 
-페르소나·프로젝트·파이프라인 CRUD를 ControllerHandler에서 분리.
-기존 handler_personas.py, handler_projects.py, handler_pipelines.py를 통합.
+프로젝트·파이프라인 CRUD를 ControllerHandler에서 분리.
 """
-
-
-class PersonaHandlerMixin:
-    """페르소나 관련 API 핸들러."""
-
-    def _handle_get_persona(self, persona_id):
-        result, err = self._personas().get_persona(persona_id)
-        if err:
-            self._error_response(err, 404, code="PERSONA_NOT_FOUND")
-        else:
-            self._json_response(result)
-
-    def _handle_create_persona(self):
-        body = self._read_body()
-        name = body.get("name", "").strip()
-        if not name:
-            return self._error_response("name 필드가 필요합니다", code="MISSING_FIELD")
-        result, err = self._personas().create_persona(
-            name=name,
-            role=body.get("role", "custom"),
-            description=body.get("description", ""),
-            system_prompt=body.get("system_prompt", ""),
-            icon=body.get("icon", "user"),
-            color=body.get("color", "#6366f1"),
-        )
-        self._json_response(result, 201)
-
-    def _handle_update_persona(self, persona_id):
-        body = self._read_body()
-        result, err = self._personas().update_persona(persona_id, body)
-        if err:
-            status = 403 if "내장" in err else 404
-            self._error_response(err, status)
-        else:
-            self._json_response(result)
-
-    def _handle_delete_persona(self, persona_id):
-        result, err = self._personas().delete_persona(persona_id)
-        if err:
-            status = 403 if "내장" in err else 404
-            self._error_response(err, status)
-        else:
-            self._json_response({"deleted": True, "persona": result})
 
 
 class ProjectHandlerMixin:

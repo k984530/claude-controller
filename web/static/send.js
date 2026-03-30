@@ -41,7 +41,6 @@ function clearPromptForm() {
   clearDirSelection();
   if (_automationMode) toggleAutomation();
   if (_depsMode) toggleDeps();
-  if (typeof clearPersonaSelection === 'function') clearPersonaSelection();
 }
 
 async function sendTask(e) {
@@ -100,10 +99,21 @@ async function sendTask(e) {
 
     const body = { prompt: finalPrompt };
     if (cwd) body.cwd = cwd;
-    if (typeof _selectedPersona === 'string' && _selectedPersona) {
-      body.persona = _selectedPersona;
+    // 스킬 시스템 프롬프트 주입 + origin 메타데이터
+    if (typeof getSkillSystemPrompt === 'function') {
+      const sp = getSkillSystemPrompt();
+      if (sp) body.system_prompt = sp;
     }
-
+    if (typeof _selectedSkills !== 'undefined' && _selectedSkills.size > 0) {
+      const sNames = [], sIds = [];
+      for (const sid of _selectedSkills) {
+        const sk = typeof _findSkill === 'function' ? _findSkill(sid) : null;
+        if (sk) { sNames.push(sk.name); sIds.push(sid); }
+      }
+      if (sNames.length > 0) {
+        body.origin = { type: 'skill', id: sIds.join(','), name: sNames.join(', ') };
+      }
+    }
     if (_contextSessionId && (_contextMode === 'resume' || _contextMode === 'fork')) {
       body.session = _contextMode + ':' + _contextSessionId;
     }

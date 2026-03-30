@@ -121,6 +121,9 @@ def get_all_jobs(cwd_filter=None):
             "cost_usd":    cost_usd,
             "duration_ms": duration_ms,
             "depends_on":  depends_on,
+            "origin_type": meta.get("ORIGIN_TYPE") or None,
+            "origin_id":   meta.get("ORIGIN_ID") or None,
+            "origin_name": meta.get("ORIGIN_NAME") or None,
         }
         if meta.get("STATUS") == "failed" and result_text:
             job_entry["user_error"] = classify_error(result_text)
@@ -357,12 +360,14 @@ def get_job_result(job_id):
         return None, f"결과 파싱 실패: {e}"
 
 
-def send_to_fifo(prompt, cwd=None, job_id=None, images=None, session=None, reuse_worktree=None, depends_on=None):
+def send_to_fifo(prompt, cwd=None, job_id=None, images=None, session=None, reuse_worktree=None, depends_on=None, system_prompt=None, origin=None):
     """FIFO 파이프에 JSON 메시지를 전송한다.
 
     Args:
         depends_on: 선행 작업 job_id 목록. 지정하면 모든 선행 작업이 완료될 때까지
                     pending 상태로 대기하다가 자동 디스패치된다.
+        system_prompt: 스킬 시스템 프롬프트. --append-system-prompt로 전달된다.
+        origin: 작업 출처 정보 dict (type, id, name). 스킬/파이프라인/수동 구분.
     """
     if not job_id:
         job_id = f"{int(time.time())}-web-{os.getpid()}-{id(prompt) % 10000}"
@@ -387,6 +392,12 @@ def send_to_fifo(prompt, cwd=None, job_id=None, images=None, session=None, reuse
         payload["session"] = session
     if reuse_worktree:
         payload["reuse_worktree"] = reuse_worktree
+    if system_prompt:
+        payload["system_prompt"] = system_prompt
+    if origin and isinstance(origin, dict):
+        for k in ("type", "id", "name"):
+            if origin.get(k):
+                payload[f"origin_{k}"] = str(origin[k])
 
     try:
         fd = os.open(str(FIFO_PATH), os.O_WRONLY | os.O_NONBLOCK)
@@ -395,5 +406,58 @@ def send_to_fifo(prompt, cwd=None, job_id=None, images=None, session=None, reuse
         return {"job_id": job_id, "prompt": prompt, "cwd": cwd}, None
     except OSError as e:
         return None, f"FIFO 전송 실패: {e}"
+
+
+def get_results(origin_type=None, origin_id=None, limit=20):
+    """완료된 작업을 origin(스킬/파이프라인/수동) 기준으로 그룹화하여 반환한다."""
+    all_jobs = get_all_jobs()
+    completed = [j for j in all_jobs if j.get("status") in ("done", "failed")]
+
+    if origin_type:
+        completed = [j for j in completed if j.get("origin_type") == origin_type]
+    if origin_id:
+        completed = [j for j in completed if j.get("origin_id") == origin_id]
+
+    groups = {}
+    for job in completed:
+        otype = job.get("origin_type") or "manual"
+        oid = job.get("origin_id") or ""
+        key = f"{otype}:{oid}" if oid else otype
+
+        if key not in groups:
+            groups[key] = {
+                "origin_type": otype,
+                "origin_id": oid or None,
+                "origin_name": job.get("origin_name") or ("직접 입력" if otype == "manual" else oid),
+                "total": 0,
+                "done": 0,
+                "failed": 0,
+                "total_cost_usd": 0.0,
+                "jobs": [],
+            }
+        g = groups[key]
+        g["total"] += 1
+        if job["status"] == "done":
+            g["done"] += 1
+        else:
+            g["failed"] += 1
+        if job.get("cost_usd"):
+            g["total_cost_usd"] += job["cost_usd"]
+        # 결과 요약: 전체 텍스트 대신 200자 이하로 축약
+        entry = {k: v for k, v in job.items() if k != "result"}
+        if job.get("result"):
+            entry["result_summary"] = job["result"][:200]
+        g["jobs"].append(entry)
+
+    for g in groups.values():
+        g["jobs"] = g["jobs"][:limit]
+        g["total_cost_usd"] = round(g["total_cost_usd"], 4) if g["total_cost_usd"] else None
+
+    sorted_groups = sorted(
+        groups.values(),
+        key=lambda g: g["jobs"][0]["created_at"] if g["jobs"] else "",
+        reverse=True,
+    )
+    return {"origins": sorted_groups}
 
 

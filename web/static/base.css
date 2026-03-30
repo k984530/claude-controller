@@ -243,14 +243,16 @@ button {
   font-family: var(--font-mono);
   background: var(--blue);
   color: #fff;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
   line-height: 1.6;
   min-width: 0;
   max-width: 200px;
   box-shadow: 0 0 0 2px var(--blue-dim), 0 1px 4px rgba(0,0,0,0.15);
   animation: ctx-label-pop 0.2s ease-out;
+}
+.ctx-session-label > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 @keyframes ctx-label-pop {
@@ -455,4 +457,22 @@ button {
   color: var(--text-muted);
 }
 
+/* ── Shared Editor Overlay & Modal ── */
+.editor-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.editor-modal {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  max-width: 90vw;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+}
 

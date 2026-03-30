@@ -35,7 +35,8 @@ function _updateContextUI() {
     const sid = _contextSessionId ? _contextSessionId.slice(0, 8) : '';
     if (sid) {
       const promptSnippet = _contextSessionPrompt ? _contextSessionPrompt.slice(0, 24) : '';
-      label.textContent = promptSnippet ? `${sid}… ${promptSnippet}` : `${sid}…`;
+      const txt = promptSnippet ? `${sid}… ${promptSnippet}` : `${sid}…`;
+      label.innerHTML = `<span>${escapeHtml(txt)}</span>`;
       label.classList.add('visible');
     }
     if (promptInfo) promptInfo.textContent = sid ? `resume:${sid}` : 'resume';
@@ -44,7 +45,8 @@ function _updateContextUI() {
     const sid = _contextSessionId ? _contextSessionId.slice(0, 8) : '';
     if (sid) {
       const promptSnippet = _contextSessionPrompt ? _contextSessionPrompt.slice(0, 24) : '';
-      label.textContent = promptSnippet ? `${sid}… ${promptSnippet}` : `${sid}…`;
+      const txt = promptSnippet ? `${sid}… ${promptSnippet}` : `${sid}…`;
+      label.innerHTML = `<span>${escapeHtml(txt)}</span>`;
       label.classList.add('visible');
     }
     if (promptInfo) promptInfo.textContent = sid ? `fork:${sid}` : 'fork';

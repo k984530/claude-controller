@@ -8,11 +8,19 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="base.css">
 <link rel="stylesheet" href="form.css">
+<link rel="stylesheet" href="dir-browser.css">
+<link rel="stylesheet" href="attachments.css">
 <link rel="stylesheet" href="jobs.css">
+<link rel="stylesheet" href="project-strip.css">
+<link rel="stylesheet" href="project-detail.css">
+<link rel="stylesheet" href="job-groups.css">
 <link rel="stylesheet" href="stream-ui.css">
 <link rel="stylesheet" href="settings-style.css">
-<link rel="stylesheet" href="persona.css">
 <link rel="stylesheet" href="pipeline.css">
+<link rel="stylesheet" href="skills.css">
+<link rel="stylesheet" href="results.css">
+<link rel="stylesheet" href="suggestions.css">
+<link rel="stylesheet" href="presets.css">
 </head>
 <body>
 
@@ -73,7 +81,6 @@
               <label class="form-label" style="display:flex;align-items:center;gap:6px;">
                 <span data-i18n="prompt">프롬프트</span>
                 <span class="img-count-badge" id="imgCountBadge"></span>
-                <span id="personaBadge" style="display:none;"></span>
                 <span id="promptSessionInfo" style="margin-left:auto;font-size:0.68rem;font-weight:400;color:var(--text-muted);font-family:var(--font-mono,monospace);"></span>
               </label>
               <div class="prompt-wrapper" id="promptWrapper">
@@ -128,6 +135,7 @@
                 <div class="dir-modal-list" id="dirList"></div>
                 <div class="dir-modal-footer">
                   <div class="dir-modal-current" id="dirCurrentPath"></div>
+                  <button type="button" class="btn btn-sm btn-primary" onclick="selectCurrentDir()" data-i18n="select">선택</button>
                   <button type="button" class="btn btn-sm" onclick="closeDirBrowser()" data-i18n="close">닫기</button>
                 </div>
               </div>
@@ -194,6 +202,25 @@
               </div>
             </div>
           </form>
+          <!-- Preset Bar -->
+          <div class="preset-bar" id="presetBar">
+            <div class="preset-bar-label">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+              <span data-i18n="presets">프리셋</span>
+              <span class="preset-count" id="presetCount"></span>
+            </div>
+            <button type="button" class="preset-trigger" onclick="togglePresetMenu()">
+              <span data-i18n="preset_load">불러오기</span>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <button type="button" class="preset-save-btn" onclick="saveCurrentAsPreset()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+              <span data-i18n="preset_save">현재 설정 저장</span>
+            </button>
+            <div class="preset-dropdown" id="presetDropdown">
+              <div id="presetDropdownList"></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -226,12 +253,6 @@
         <div class="project-strip" id="projectStrip"></div>
         <div class="project-detail" id="projectDetail" style="display:none;"></div>
         <div class="stats-bar" id="statsBar">
-          <div class="stats-period-btns">
-            <button class="stats-period-btn active" data-period="all" onclick="setStatsPeriod('all')">전체</button>
-            <button class="stats-period-btn" data-period="day" onclick="setStatsPeriod('day')">24h</button>
-            <button class="stats-period-btn" data-period="week" onclick="setStatsPeriod('week')">7d</button>
-            <button class="stats-period-btn" data-period="month" onclick="setStatsPeriod('month')">30d</button>
-          </div>
           <div class="stats-metrics" id="statsMetrics">
             <span class="stats-metric" id="statTotal" title="전체 작업 수">-</span>
             <span class="stats-metric stats-success" id="statSuccess" title="성공률">-</span>
@@ -279,33 +300,7 @@
       </div>
     </div>
 
-    <!-- Section 3: Personas -->
-    <div class="section" id="personaSection">
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            <span data-i18n="personas">페르소나</span>
-          </div>
-          <div class="card-header-actions">
-            <button class="btn btn-sm" onclick="openCreatePersonaDialog()" title="커스텀 페르소나 만들기">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              <span>만들기</span>
-            </button>
-            <button class="btn btn-sm btn-icon" onclick="fetchPersonas()" title="새로고침">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-            </button>
-          </div>
-        </div>
-        <div id="personaGrid" class="persona-grid">
-          <div class="empty-state" style="padding:20px; text-align:center; color:var(--text-muted); font-size:0.8rem;">
-            페르소나를 불러오는 중...
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Section 4: Automations -->
+    <!-- Section 3: Automations -->
     <div class="section" id="pipelineSection">
       <div class="card">
         <div class="card-header">
@@ -333,10 +328,90 @@
       </div>
     </div>
 
+    <!-- Section 4: Skills -->
+    <div class="section" id="skillsSection">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            <span data-i18n="skills">스킬</span>
+          </div>
+          <div class="card-actions">
+            <button class="icon-btn" onclick="toggleSkillEditMode()" id="btnSkillEdit" title="편집 모드">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>
+          </div>
+        </div>
+        <div id="skillsGrid" class="skills-columns"></div>
+      </div>
+    </div>
+
+    <!-- Section 5: Suggestions / 개선 제안 -->
+    <div class="section" id="suggestionsSection">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg>
+            <span>개선 제안</span>
+            <span class="sug-count-badge" id="sugCount"></span>
+          </div>
+          <div class="card-actions">
+            <button class="btn btn-sm btn-primary" id="btnGenerateSug" onclick="generateSuggestions()" title="작업 이력을 분석하여 개선 제안 생성">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <span style="margin-left:2px;">분석 시작</span>
+            </button>
+          </div>
+        </div>
+        <div class="suggestions-list" id="suggestionsList"></div>
+        <div class="suggestions-empty" id="suggestionsEmpty"></div>
+      </div>
+    </div>
+
+    <!-- Results / 결과 기록 -->
+    <div class="section" id="resultsSection">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            <span>결과 기록</span>
+          </div>
+          <div class="card-actions">
+            <button class="icon-btn" onclick="loadResults()" title="새로고침">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            </button>
+          </div>
+        </div>
+        <div id="resultsBody"></div>
+      </div>
+    </div>
+
+
   </main>
 </div>
 
 <!-- Pipeline modal removed — 자동화 등록은 입력창에서 직접 수행 -->
+
+<!-- Layout Switcher FAB -->
+<button class="layout-fab" onclick="toggleLayoutPopup()" title="레이아웃 변경">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+</button>
+<div class="layout-popup" id="layoutPopup">
+  <div class="layout-popup-title">레이아웃</div>
+  <div class="layout-options">
+    <button class="layout-opt active" data-cols="1" onclick="setLayoutCols(1)" title="1열 (세로 배치)">
+      <div class="layout-opt-icon cols-1"><span></span><span></span><span></span></div>
+      <span class="layout-opt-label">1열</span>
+    </button>
+    <button class="layout-opt" data-cols="2" onclick="setLayoutCols(2)" title="2열 그리드">
+      <div class="layout-opt-icon cols-2"><span></span><span></span><span></span><span></span></div>
+      <span class="layout-opt-label">2열</span>
+    </button>
+    <button class="layout-opt" data-cols="3" onclick="setLayoutCols(3)" title="3열 그리드">
+      <div class="layout-opt-icon cols-3"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+      <span class="layout-opt-label">3열</span>
+    </button>
+  </div>
+</div>
 
 <!-- Theme Toggle FAB -->
 <button class="theme-fab" onclick="toggleTheme()" title="테마 전환">
@@ -415,7 +490,7 @@
 
 <script>
 // 캐시 버스팅: 순서 보장 로드
-['i18n-data','i18n','utils','api','context','attachments','dirs','send','stream','jobs','job-projects','checkpoints','pipelines','personas','settings','app']
+['i18n-data','i18n','utils','api','context','attachments','dirs','send','stream','job-rendering','job-actions','job-fetch','jobs','job-projects','checkpoints','pipelines','goals','skills','presets','suggestions','results','settings','app']
 .forEach(m => { const s = document.createElement('script'); s.src = m + '.js?t=' + Date.now(); s.async = false; document.body.appendChild(s); });
 </script>
 </body>

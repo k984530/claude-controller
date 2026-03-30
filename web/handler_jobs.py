@@ -98,16 +98,13 @@ class JobHandlerMixin:
         if not prompt:
             return self._error_response("prompt 필드가 필요합니다", code="MISSING_FIELD")
 
-        # 페르소나 적용: system_prompt를 프롬프트 앞에 주입
-        persona_id = body.get("persona")
-        if persona_id:
-            import personas as _p
-            prompt = _p.apply_persona_to_prompt(persona_id, prompt)
-
         # depends_on: 선행 작업 ID 목록 (예: [42, 43] 또는 "42,43")
         depends_on = body.get("depends_on")
         if isinstance(depends_on, str):
             depends_on = [d.strip() for d in depends_on.split(",") if d.strip()]
+
+        # origin: 작업 출처 (스킬/파이프라인 등)
+        origin = body.get("origin") or None
 
         result, err = self._jobs_mod().send_to_fifo(
             prompt,
@@ -116,6 +113,8 @@ class JobHandlerMixin:
             images=body.get("images") or None,
             session=body.get("session") or None,
             depends_on=depends_on or None,
+            system_prompt=body.get("system_prompt") or None,
+            origin=origin,
         )
         if err:
             self._error_response(err, 502, code="SEND_FAILED")
@@ -370,3 +369,13 @@ class JobHandlerMixin:
                 self._error_response(err, 500, code="REWIND_FAILED")
         else:
             self._json_response(result, 201)
+
+    def _handle_results(self, parsed):
+        qs = parse_qs(parsed.query)
+        origin_type = qs.get("origin_type", [None])[0]
+        origin_id = qs.get("origin_id", [None])[0]
+        limit = self._safe_int(qs.get("limit", [20])[0], 20)
+        results = self._jobs_mod().get_results(
+            origin_type=origin_type, origin_id=origin_id, limit=limit,
+        )
+        self._json_response(results)

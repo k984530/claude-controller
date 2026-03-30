@@ -268,3 +268,117 @@
   color: var(--text);
 }
 
+/* ── Layout Switcher FAB ── */
+.layout-fab {
+  position: fixed;
+  bottom: 136px;
+  right: 24px;
+  z-index: 300;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  transition: all var(--transition);
+}
+.layout-fab:hover {
+  background: var(--surface-hover);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.layout-popup {
+  display: none;
+  position: fixed;
+  bottom: 136px;
+  right: 68px;
+  z-index: 310;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  padding: 10px 12px;
+  animation: panel-slide 0.15s ease-out;
+}
+.layout-popup.open { display: block; }
+
+.layout-popup-title {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 8px;
+}
+
+.layout-options {
+  display: flex;
+  gap: 6px;
+}
+
+.layout-opt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition);
+  min-width: 52px;
+}
+.layout-opt:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-light);
+  color: var(--text);
+}
+.layout-opt.active {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.layout-opt-icon {
+  display: grid;
+  gap: 2px;
+  width: 24px;
+  height: 20px;
+}
+.layout-opt-icon span {
+  background: currentColor;
+  border-radius: 1px;
+  opacity: 0.5;
+}
+.layout-opt.active .layout-opt-icon span {
+  opacity: 0.8;
+}
+/* 1-col icon: 3 rows */
+.layout-opt-icon.cols-1 {
+  grid-template-columns: 1fr;
+  grid-template-rows: repeat(3, 1fr);
+}
+/* 2-col icon: 2x2 grid */
+.layout-opt-icon.cols-2 {
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+}
+/* 3-col icon: 2x3 grid */
+.layout-opt-icon.cols-3 {
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+}
+.layout-opt-label {
+  font-size: 0.62rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+

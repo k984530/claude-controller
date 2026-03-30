@@ -15,8 +15,7 @@ Controller Service — HTTP REST API 핸들러
   - handler_jobs.py     → JobHandlerMixin
   - handler_sessions.py → SessionHandlerMixin
   - handler_fs.py       → FsHandlerMixin
-  - handler_goals.py    → GoalHandlerMixin
-  - handler_crud.py     → ProjectHandlerMixin, PipelineHandlerMixin, PersonaHandlerMixin
+  - handler_crud.py     → ProjectHandlerMixin, PipelineHandlerMixin
 """
 
 import http.server
@@ -34,21 +33,21 @@ import jobs
 import checkpoint
 import projects as _projects_mod
 import pipeline as _pipeline_mod
-import personas as _personas_mod
 import webhook as _webhook_mod
 import audit as _audit_mod
+import suggestions as _suggestions_mod
+import presets as _presets_mod
 
 from handler_base import ResponseMixin, SecurityMixin, StaticServeMixin
 from handler_jobs import JobHandlerMixin
 from handler_sessions import SessionHandlerMixin
 from handler_fs import FsHandlerMixin
-from handler_goals import GoalHandlerMixin
-from handler_crud import ProjectHandlerMixin, PipelineHandlerMixin, PersonaHandlerMixin
+from handler_crud import ProjectHandlerMixin, PipelineHandlerMixin
+from handler_suggestions import SuggestionHandlerMixin
+from handler_presets import PresetHandlerMixin
 
 # ── 사전 컴파일된 파라미터 라우팅 테이블 ──
 _GET_PARAM_ROUTES = [
-    (re.compile(r"^/api/goals/([^/]+)$"), "_handle_get_goal"),
-    (re.compile(r"^/api/personas/([^/]+)$"), "_handle_get_persona"),
     (re.compile(r"^/api/pipelines/([^/]+)/status$"), "_handle_pipeline_status"),
     (re.compile(r"^/api/pipelines/([^/]+)/history$"), "_handle_pipeline_history"),
     (re.compile(r"^/api/projects/([^/]+)/jobs$"), "_handle_project_jobs"),
@@ -58,32 +57,31 @@ _GET_PARAM_ROUTES = [
     (re.compile(r"^/api/jobs/(\w+)/checkpoints$"), "_handle_job_checkpoints"),
     (re.compile(r"^/api/jobs/(\w+)/diff$"), "_handle_job_diff"),
     (re.compile(r"^/api/session/([a-f0-9-]+)/job$"), "_handle_job_by_session"),
+    (re.compile(r"^/api/presets/([^/]+)$"), "_handle_get_preset"),
 ]
 
 _POST_PARAM_ROUTES = [
-    (re.compile(r"^/api/goals/([^/]+)/update$"), "_handle_update_goal"),
-    (re.compile(r"^/api/goals/([^/]+)/approve$"), "_handle_approve_goal"),
-    (re.compile(r"^/api/goals/([^/]+)/plan$"), "_handle_plan_goal"),
-    (re.compile(r"^/api/goals/([^/]+)/execute$"), "_handle_execute_goal"),
-    (re.compile(r"^/api/personas/([^/]+)/update$"), "_handle_update_persona"),
+    (re.compile(r"^/api/suggestions/([^/]+)/apply$"), "_handle_apply_suggestion"),
+    (re.compile(r"^/api/suggestions/([^/]+)/dismiss$"), "_handle_dismiss_suggestion"),
     (re.compile(r"^/api/pipelines/([^/]+)/run$"), "_handle_pipeline_run"),
     (re.compile(r"^/api/pipelines/([^/]+)/stop$"), "_handle_pipeline_stop"),
     (re.compile(r"^/api/pipelines/([^/]+)/update$"), "_handle_update_pipeline"),
     (re.compile(r"^/api/pipelines/([^/]+)/reset$"), "_handle_pipeline_reset"),
     (re.compile(r"^/api/projects/([^/]+)$"), "_handle_update_project"),
     (re.compile(r"^/api/jobs/(\w+)/rewind$"), "_handle_job_rewind"),
+    (re.compile(r"^/api/presets/([^/]+)$"), "_handle_update_preset"),
 ]
 
 _DELETE_PARAM_ROUTES = [
-    (re.compile(r"^/api/goals/([^/]+)$"), "_handle_cancel_goal"),
-    (re.compile(r"^/api/personas/([^/]+)$"), "_handle_delete_persona"),
+    (re.compile(r"^/api/suggestions/([^/]+)$"), "_handle_delete_suggestion"),
     (re.compile(r"^/api/pipelines/([^/]+)$"), "_handle_delete_pipeline"),
     (re.compile(r"^/api/projects/([^/]+)$"), "_handle_remove_project"),
     (re.compile(r"^/api/jobs/(\w+)$"), "_handle_delete_job"),
+    (re.compile(r"^/api/presets/([^/]+)$"), "_handle_delete_preset"),
 ]
 
 # 핫 리로드 대상 모듈
-_HOT_MODULES = [jobs, checkpoint, _projects_mod, _pipeline_mod, _personas_mod, _webhook_mod, _audit_mod]
+_HOT_MODULES = [jobs, checkpoint, _projects_mod, _pipeline_mod, _webhook_mod, _audit_mod, _suggestions_mod, _presets_mod]
 
 
 def _hot_reload():
@@ -98,10 +96,10 @@ class ControllerHandler(
     JobHandlerMixin,
     SessionHandlerMixin,
     FsHandlerMixin,
-    GoalHandlerMixin,
     ProjectHandlerMixin,
     PipelineHandlerMixin,
-    PersonaHandlerMixin,
+    SuggestionHandlerMixin,
+    PresetHandlerMixin,
     ResponseMixin,
     SecurityMixin,
     StaticServeMixin,
@@ -131,7 +129,7 @@ class ControllerHandler(
     def _ckpt_mod(self):    return checkpoint
     def _projects(self):    return _projects_mod
     def _pipeline(self):    return _pipeline_mod
-    def _personas(self):    return _personas_mod
+    def _presets(self):     return _presets_mod
 
     # ════════════════════════════════════════════════
     #  HTTP 라우팅
@@ -187,6 +185,8 @@ class ControllerHandler(
             return self._handle_status()
         if path == "/api/stats":
             return self._handle_stats(parsed)
+        if path == "/api/results":
+            return self._handle_results(parsed)
         if path == "/api/jobs":
             qs = parse_qs(parsed.query)
             return self._handle_jobs(
@@ -199,6 +199,8 @@ class ControllerHandler(
             return self._handle_sessions(filter_cwd=qs.get("cwd", [None])[0])
         if path == "/api/config":
             return self._handle_get_config()
+        if path == "/api/skills":
+            return self._handle_get_skills()
         if path == "/api/recent-dirs":
             return self._handle_get_recent_dirs()
         if path == "/api/dirs":
@@ -206,10 +208,10 @@ class ControllerHandler(
             return self._handle_dirs(qs.get("path", [os.path.expanduser("~")])[0])
         if path == "/api/projects":
             return self._handle_list_projects()
-        if path == "/api/goals":
-            return self._handle_list_goals(parsed)
-        if path == "/api/personas":
-            return self._json_response(self._personas().list_personas())
+        if path == "/api/suggestions":
+            return self._handle_list_suggestions(parsed)
+        if path == "/api/presets":
+            return self._handle_list_presets()
         if path == "/api/pipelines":
             return self._handle_list_pipelines()
         if path == "/api/pipelines/evolution":
@@ -265,6 +267,8 @@ class ControllerHandler(
             return self._handle_service_stop()
         if path == "/api/config":
             return self._handle_save_config()
+        if path == "/api/skills":
+            return self._handle_save_skills()
         if path == "/api/recent-dirs":
             return self._handle_save_recent_dirs()
         if path == "/api/mkdir":
@@ -273,10 +277,12 @@ class ControllerHandler(
             return self._handle_add_project()
         if path == "/api/projects/create":
             return self._handle_create_project()
-        if path == "/api/goals":
-            return self._handle_create_goal()
-        if path == "/api/personas":
-            return self._handle_create_persona()
+        if path == "/api/suggestions/generate":
+            return self._handle_generate_suggestions()
+        if path == "/api/suggestions/clear":
+            return self._handle_clear_dismissed()
+        if path == "/api/presets":
+            return self._handle_create_preset()
         if path == "/api/pipelines":
             return self._handle_create_pipeline()
         if path == "/api/pipelines/tick-all":

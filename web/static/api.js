@@ -96,36 +96,4 @@ async function serviceAction(action) {
   }
 }
 
-/* ── Goals API ── */
-
-function fetchGoals(status) {
-  const qs = status ? `?status=${encodeURIComponent(status)}` : '';
-  return apiFetch(`/api/goals${qs}`);
-}
-
-function createGoal(objective, mode = 'gate', context = {}, budgetUsd = 5.0, maxTasks = 20) {
-  return apiFetch('/api/goals', {
-    method: 'POST',
-    body: JSON.stringify({ objective, mode, context, budget_usd: budgetUsd, max_tasks: maxTasks }),
-  });
-}
-
-function fetchGoalDetail(goalId) {
-  return apiFetch(`/api/goals/${encodeURIComponent(goalId)}`);
-}
-
-function updateGoal(goalId, changes) {
-  return apiFetch(`/api/goals/${encodeURIComponent(goalId)}/update`, {
-    method: 'POST',
-    body: JSON.stringify(changes),
-  });
-}
-
-function approveGoal(goalId) {
-  return apiFetch(`/api/goals/${encodeURIComponent(goalId)}/approve`, { method: 'POST' });
-}
-
-function cancelGoal(goalId) {
-  return apiFetch(`/api/goals/${encodeURIComponent(goalId)}`, { method: 'DELETE' });
-}
 

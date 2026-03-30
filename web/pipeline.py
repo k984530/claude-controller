@@ -88,7 +88,11 @@ def dispatch(pipe_id: str, force: bool = False) -> tuple[dict | None, str | None
         save_pipelines(pipelines)
 
     enriched_prompt = build_enriched_prompt(pipe)
-    result, send_err = send_to_fifo(enriched_prompt, cwd=pipe["project_path"])
+    result, send_err = send_to_fifo(
+        enriched_prompt,
+        cwd=pipe["project_path"],
+        origin={"type": "pipeline", "id": pipe["id"], "name": pipe.get("name", "")},
+    )
 
     if send_err:
         def clear_marker(p):

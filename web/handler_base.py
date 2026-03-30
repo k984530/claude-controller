@@ -79,7 +79,7 @@ class ResponseMixin:
 
     _MAX_BODY_SIZE = 10 * 1024 * 1024  # 10 MB
 
-    def _read_body(self):
+    def _read_body(self, allow_list=False):
         try:
             length = int(self.headers.get("Content-Length", 0))
         except (ValueError, TypeError):
@@ -91,7 +91,7 @@ class ResponseMixin:
                 f"요청 본문이 최대 크기를 초과합니다 (최대 {self._MAX_BODY_SIZE // (1024 * 1024)}MB)")
         raw = self.rfile.read(length)
         data = json.loads(raw)
-        if not isinstance(data, dict):
+        if not isinstance(data, dict) and not (allow_list and isinstance(data, list)):
             raise ValueError("요청 본문은 JSON 객체여야 합니다")
         return data
 

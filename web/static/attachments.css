@@ -1,0 +1,209 @@
+/* ── Image Attachments ── */
+.prompt-wrapper {
+  position: relative;
+}
+
+.prompt-wrapper.drag-over textarea {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.drop-overlay {
+  display: none;
+  position: absolute;
+  inset: 0;
+  background: rgba(108, 140, 255, 0.08);
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius);
+  z-index: 10;
+  pointer-events: none;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent);
+  gap: 8px;
+}
+
+.prompt-wrapper.drag-over .drop-overlay {
+  display: flex;
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.image-previews {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.image-previews:empty { display: none; }
+
+.img-thumb {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  background: var(--bg);
+  flex-shrink: 0;
+  animation: fadeIn 0.2s ease;
+}
+
+.img-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  cursor: pointer;
+}
+
+.img-thumb .img-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.7);
+  color: #fff;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+  border: none;
+  padding: 0;
+  line-height: 1;
+}
+
+.img-thumb:hover .img-remove {
+  opacity: 1;
+}
+
+.img-thumb.uploading {
+  opacity: 0.5;
+}
+
+.img-thumb.uploading::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.3);
+}
+
+.img-count-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  background: var(--accent-glow);
+  color: var(--accent);
+  margin-left: 8px;
+}
+
+.img-count-badge:empty { display: none; }
+
+/* ── File Attachments (non-image) ── */
+.file-thumb {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  max-width: 200px;
+  animation: fadeIn 0.2s ease;
+  flex-shrink: 0;
+}
+.file-thumb .file-icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: var(--surface-active);
+  color: var(--text-muted);
+  flex-shrink: 0;
+  font-size: 0.6rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+}
+.file-thumb .file-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
+  min-width: 0;
+}
+.file-thumb .file-name {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.file-thumb .file-size {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+.file-thumb .file-remove {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.7);
+  color: #fff;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+  border: none;
+  padding: 0;
+  line-height: 1;
+}
+.file-thumb:hover .file-remove { opacity: 1; }
+.file-thumb.uploading { opacity: 0.5; }
+
+/* ── Attach Button (inside prompt-wrapper) ── */
+.attach-float-btn {
+  position: absolute;
+  bottom: 12px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition);
+  z-index: 5;
+}
+.attach-float-btn:hover {
+  background: var(--surface-active);
+  color: var(--accent);
+  border-color: var(--accent);
+}
