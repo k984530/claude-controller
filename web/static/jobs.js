@@ -11,8 +11,6 @@ let _allJobs = [];
 let _registeredProjects = [];
 let _jobListCollapsed = localStorage.getItem('jobListCollapsed') === '1';
 let _collapsedGroups = JSON.parse(localStorage.getItem('collapsedGroups') || '{}');
-let _selectedProject = null;
-let _selectedProjectInfo = null;
 let _jobPage = 1;
 let _jobLimit = 0;
 let _jobPages = 1;
@@ -78,13 +76,11 @@ function _applyJobListCollapse() {
   const filterBar = document.getElementById('jobFilterBar');
   const strip = document.getElementById('projectStrip');
   const statsBar = document.getElementById('statsBar');
-  const detail = document.getElementById('projectDetail');
   const btn = document.getElementById('btnCollapseJobs');
   if (wrap) wrap.style.display = _jobListCollapsed ? 'none' : '';
   if (filterBar) filterBar.style.display = _jobListCollapsed ? 'none' : '';
   if (strip) strip.style.display = _jobListCollapsed ? 'none' : '';
   if (statsBar) statsBar.style.display = _jobListCollapsed ? 'none' : '';
-  if (detail) detail.style.display = _jobListCollapsed ? 'none' : (_selectedProject ? '' : 'none');
   if (btn) btn.classList.toggle('collapsed', _jobListCollapsed);
 }
 
@@ -106,20 +102,6 @@ function setJobProjectFilter(project) {
   _jobFilterProject = project;
   const sel = document.getElementById('jobProjectSelect');
   if (sel) sel.value = project;
-
-  if (project === 'all') {
-    _selectedProject = null;
-    _selectedProjectInfo = null;
-    _hideProjectDetail();
-  } else {
-    const projects = _extractProjects(_allJobs);
-    _selectedProject = projects.find(p => p.name === project) || null;
-    _selectedProjectInfo = null;
-    _showProjectDetail();
-    if (_selectedProject?.registered && _selectedProject.projectId) {
-      _fetchProjectInfo(_selectedProject.projectId);
-    }
-  }
 
   applyJobFilters();
 }
@@ -351,7 +333,6 @@ function renderJobs(jobs) {
   _allJobs = jobs;
   _updateProjectDropdown(jobs);
   _renderProjectStrip(jobs);
-  if (_selectedProject) _showProjectDetail();
   const filtered = filterJobs(jobs);
   const tbody = document.getElementById('jobTableBody');
   const countEl = document.getElementById('jobCount');
@@ -385,6 +366,8 @@ function renderJobs(jobs) {
       updateJobRowStatus(job.id || job.job_id, job.status);
     }
     _lastJobsFingerprint = fp;
+    const hasCompleted = filtered.some(j => j.status === 'done' || j.status === 'failed');
+    document.getElementById('btnDeleteCompleted').style.display = hasCompleted ? 'inline-flex' : 'none';
     return;
   }
 

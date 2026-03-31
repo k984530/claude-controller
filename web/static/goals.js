@@ -12,7 +12,7 @@ function _goalProject() {
 }
 
 function _projectShort(path) {
-  if (!path) return '(미지정)';
+  if (!path) return t('unspecified');
   return path.replace(/\/+$/, '').split('/').pop() || path;
 }
 
@@ -46,7 +46,7 @@ function _renderGoals() {
     list.innerHTML = '';
     if (empty) {
       empty.style.display = '';
-      empty.innerHTML = '<p>등록된 목표가 없습니다</p><button class="btn-small" onclick="openGoalCreate()">목표 추가</button>';
+      empty.innerHTML = `<p>${t('goal_empty')}</p><button class="btn-small" onclick="openGoalCreate()">${t('goal_add')}</button>`;
     }
     return;
   }
@@ -91,7 +91,7 @@ function _renderGoals() {
           ` : ''}
           <span class="goal-group-count">${goals.length}</span>
           ${doneTasks < totalTasks ? `
-            <button class="goal-dispatch-next-btn" data-dispatch-project="${escapeHtml(projectPath)}" onclick="event.stopPropagation();_dispatchNext(this.dataset.dispatchProject)" title="다음 미완료 태스크를 AI에게 실행">
+            <button class="goal-dispatch-next-btn" data-dispatch-project="${escapeHtml(projectPath)}" onclick="event.stopPropagation();_dispatchNext(this.dataset.dispatchProject)" title="${t('goal_dispatch_title')}">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
             </button>
           ` : ''}
@@ -113,7 +113,7 @@ function _renderGoalCard(g) {
         <span class="goal-card-title">${escapeHtml(g.title)}</span>
         ${g.tasks_total > 0 ? `<span class="goal-progress-text">${g.tasks_done}/${g.tasks_total}</span>` : ''}
         ${g.status === 'active' && g.tasks_done < g.tasks_total ? `
-          <button class="goal-exec-btn" data-exec-goal="${escapeHtml(g.id)}" title="AI에게 실행">
+          <button class="goal-exec-btn" data-exec-goal="${escapeHtml(g.id)}" title="${t('goal_exec_title')}">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
           </button>
         ` : ''}
@@ -142,22 +142,22 @@ function openGoalCreate(presetProject) {
   overlay.className = 'editor-overlay';
   overlay.innerHTML = `
     <div class="editor-modal goal-editor-modal">
-      <div class="goal-editor-title">새 목표</div>
-      <label>프로젝트 경로
+      <div class="goal-editor-title">${t('goal_new_title')}</div>
+      <label>${t('goal_label_path')}
         <input type="text" id="goalEdProject" value="${escapeHtml(project)}" placeholder="/path/to/project" />
       </label>
-      <label>제목
-        <input type="text" id="goalEdTitle" placeholder="목표 제목" />
+      <label>${t('goal_label_title')}
+        <input type="text" id="goalEdTitle" placeholder="${t('goal_title_ph')}" />
       </label>
-      <label>내용 (마크다운, 체크박스로 할 일 관리)
-        <textarea id="goalEdBody" rows="10" placeholder="## 목표 설명&#10;&#10;- [ ] 할 일 1&#10;- [ ] 할 일 2&#10;- [ ] 할 일 3"></textarea>
+      <label>${t('goal_label_body')}
+        <textarea id="goalEdBody" rows="10" placeholder="## Goal&#10;&#10;- [ ] Task 1&#10;- [ ] Task 2&#10;- [ ] Task 3"></textarea>
       </label>
       <div class="goal-editor-actions">
-        <button class="btn-small btn-muted" onclick="document.getElementById('goalEditorOverlay').remove()">취소</button>
-        <button class="btn-small" onclick="_createGoal(false)">생성</button>
+        <button class="btn-small btn-muted" onclick="document.getElementById('goalEditorOverlay').remove()">${t('cancel')}</button>
+        <button class="btn-small" onclick="_createGoal(false)">${t('create')}</button>
         <button class="btn-small btn-execute" onclick="_createGoal(true)">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-          생성 + AI 실행
+          ${t('goal_create_run')}
         </button>
       </div>
     </div>
@@ -175,8 +175,8 @@ async function _createGoal(executeNow) {
   const project = document.getElementById('goalEdProject').value.trim();
   const title = document.getElementById('goalEdTitle').value.trim();
   const body = document.getElementById('goalEdBody').value;
-  if (!project) { showToast('프로젝트 경로를 입력하세요', 'error'); return; }
-  if (!title) { showToast('제목을 입력하세요', 'error'); return; }
+  if (!project) { showToast(t('goal_path_req'), 'error'); return; }
+  if (!title) { showToast(t('goal_title_req'), 'error'); return; }
 
   try {
     const goal = await apiFetch('/api/goals', {
@@ -184,13 +184,13 @@ async function _createGoal(executeNow) {
       body: JSON.stringify({ title, body, project }),
     });
     document.getElementById('goalEditorOverlay').remove();
-    showToast(executeNow ? '목표 생성 → AI 실행' : '목표가 생성되었습니다');
+    showToast(executeNow ? t('goal_created_run') : t('goal_created'));
     loadGoals();
     if (executeNow && goal && goal.id) {
       _executeGoal(goal.id);
     }
   } catch (e) {
-    showToast('생성 실패: ' + e.message, 'error');
+    showToast(t('goal_create_fail') + ': ' + e.message, 'error');
   }
 }
 
@@ -201,7 +201,7 @@ async function openGoalDetail(goalId) {
   try {
     goal = await apiFetch(`/api/goals/${goalId}`);
   } catch {
-    showToast('목표를 불러올 수 없습니다', 'error');
+    showToast(t('goal_load_fail'), 'error');
     return;
   }
 
@@ -223,24 +223,24 @@ async function openGoalDetail(goalId) {
             <option value="completed" ${goal.status === 'completed' ? 'selected' : ''}>completed</option>
             <option value="archived" ${goal.status === 'archived' ? 'selected' : ''}>archived</option>
           </select>
-          <button class="skills-icon-btn goal-delete-btn" onclick="_deleteGoal('${goal.id}')" title="삭제">
+          <button class="skills-icon-btn goal-delete-btn" onclick="_deleteGoal('${goal.id}')" title="${t('delete_label')}">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
           </button>
         </div>
       </div>
-      <label>제목
+      <label>${t('goal_label_title')}
         <input type="text" id="goalEdTitle" value="${escapeHtml(goal.title)}" />
       </label>
-      <label>내용
+      <label>${t('goal_label_content')}
         <textarea id="goalEdBody" rows="14">${escapeHtml(goal.body || '')}</textarea>
       </label>
       <div class="goal-editor-actions">
-        <button class="btn-small btn-muted" onclick="document.getElementById('goalEditorOverlay').remove()">닫기</button>
-        <button class="btn-small" onclick="_updateGoal('${goal.id}')">저장</button>
+        <button class="btn-small btn-muted" onclick="document.getElementById('goalEditorOverlay').remove()">${t('close')}</button>
+        <button class="btn-small" onclick="_updateGoal('${goal.id}')">${t('save')}</button>
         ${goal.status === 'active' ? `
           <button class="btn-small btn-execute" onclick="_executeGoal('${goal.id}')">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            AI 실행
+            ${t('goal_ai_run')}
           </button>
         ` : ''}
       </div>
@@ -254,7 +254,7 @@ async function _updateGoal(goalId) {
   const title = document.getElementById('goalEdTitle').value.trim();
   const body = document.getElementById('goalEdBody').value;
   const status = document.getElementById('goalStatusSelect').value;
-  if (!title) { showToast('제목을 입력하세요', 'error'); return; }
+  if (!title) { showToast(t('goal_title_req'), 'error'); return; }
 
   try {
     await apiFetch(`/api/goals/${goalId}/update`, {
@@ -262,22 +262,22 @@ async function _updateGoal(goalId) {
       body: JSON.stringify({ title, body, status }),
     });
     document.getElementById('goalEditorOverlay').remove();
-    showToast('저장되었습니다');
+    showToast(t('goal_saved'));
     loadGoals();
   } catch (e) {
-    showToast('저장 실패: ' + e.message, 'error');
+    showToast(t('goal_save_fail') + ': ' + e.message, 'error');
   }
 }
 
 async function _deleteGoal(goalId) {
-  if (!confirm('이 목표를 삭제하시겠습니까?')) return;
+  if (!confirm(t('goal_confirm_del'))) return;
   try {
     await apiFetch(`/api/goals/${goalId}`, { method: 'DELETE' });
     document.getElementById('goalEditorOverlay').remove();
-    showToast('삭제되었습니다');
+    showToast(t('goal_deleted'));
     loadGoals();
   } catch (e) {
-    showToast('삭제 실패: ' + e.message, 'error');
+    showToast(t('goal_delete_fail') + ': ' + e.message, 'error');
   }
 }
 
@@ -291,10 +291,10 @@ async function _executeGoal(goalId) {
     });
     const overlay = document.getElementById('goalEditorOverlay');
     if (overlay) overlay.remove();
-    showToast(`AI 실행 디스패치 완료 (미완료 ${result.pending_tasks.length}건)`);
+    showToast(t('goal_dispatch_done') + ' (' + t('goal_pending_tasks').replace('{n}', result.pending_tasks.length) + ')');
     if (typeof fetchJobs === 'function') fetchJobs();
   } catch (e) {
-    showToast('실행 실패: ' + e.message, 'error');
+    showToast(t('goal_exec_fail') + ': ' + e.message, 'error');
   }
 }
 
@@ -307,14 +307,14 @@ async function _dispatchNext(projectPath) {
       body: JSON.stringify({ project: projectPath }),
     });
     if (result.dispatched) {
-      showToast(`[${_projectShort(projectPath)}] "${result.task}" → AI 실행`);
+      showToast(`[${_projectShort(projectPath)}] "${result.task}" → ${t('goal_ai_run')}`);
       if (typeof fetchJobs === 'function') fetchJobs();
       loadGoals();
     } else {
-      showToast(result.reason || '미완료 태스크 없음');
+      showToast(result.reason || t('goal_no_pending'));
     }
   } catch (e) {
-    showToast('디스패치 실패: ' + e.message, 'error');
+    showToast(t('goal_dispatch_fail') + ': ' + e.message, 'error');
   }
 }
 
@@ -329,7 +329,7 @@ async function _dispatchNext(projectPath) {
     const title = input.value.trim();
     if (!title) return;
     const project = _goalProject();
-    if (!project) { showToast('프로젝트(CWD)를 먼저 선택하세요', 'error'); return; }
+    if (!project) { showToast(t('goal_select_project'), 'error'); return; }
     const executeNow = e.shiftKey;
 
     input.disabled = true;
@@ -343,13 +343,13 @@ async function _dispatchNext(projectPath) {
         }),
       });
       input.value = '';
-      showToast(executeNow ? '목표 생성 → AI 실행' : '목표 생성 완료');
+      showToast(executeNow ? t('goal_created_run') : t('goal_created_done'));
       loadGoals();
       if (executeNow && goal && goal.id) {
         _executeGoal(goal.id);
       }
     } catch (err) {
-      showToast('생성 실패: ' + err.message, 'error');
+      showToast(t('goal_create_fail') + ': ' + err.message, 'error');
     } finally {
       input.disabled = false;
       input.focus();

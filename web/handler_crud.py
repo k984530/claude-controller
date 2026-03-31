@@ -124,7 +124,7 @@ class PipelineHandlerMixin:
 
     def _handle_update_pipeline(self, pipe_id):
         body = self._read_body()
-        result, err = self._pipeline().update_pipeline(
+        result, err = self._pipeline().modify_pipeline(
             pipe_id,
             command=body.get("command"),
             interval=body.get("interval"),

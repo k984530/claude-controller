@@ -8,11 +8,26 @@ File System & Config HTTP 핸들러 Mixin
   - POST /api/mkdir
 """
 
-import json
+import base64
 import os
 import subprocess
+import time
 
-from config import DATA_DIR, SETTINGS_FILE, SKILLS_FILE, RECENT_DIRS_FILE
+from config import DATA_DIR, SETTINGS_FILE, SKILLS_FILE, RECENT_DIRS_FILE, UPLOADS_DIR
+from utils import load_json_file, atomic_json_save
+
+IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
+
+ALLOWED_UPLOAD_EXTS = IMAGE_EXTS | {
+    ".txt", ".md", ".csv", ".json", ".xml", ".yaml", ".yml", ".toml",
+    ".py", ".js", ".ts", ".jsx", ".tsx", ".html", ".css", ".scss",
+    ".sh", ".bash", ".zsh", ".fish",
+    ".c", ".cpp", ".h", ".hpp", ".java", ".kt", ".go", ".rs", ".rb",
+    ".swift", ".m", ".r", ".sql", ".graphql",
+    ".log", ".env", ".conf", ".ini", ".cfg",
+    ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".pptx",
+    ".zip", ".tar", ".gz",
+}
 
 
 class FsHandlerMixin:
@@ -29,12 +44,7 @@ class FsHandlerMixin:
             "checkpoint_interval": 5,
             "locale": "ko",
         }
-        try:
-            if SETTINGS_FILE.exists():
-                saved = json.loads(SETTINGS_FILE.read_text("utf-8"))
-                defaults.update(saved)
-        except (json.JSONDecodeError, OSError):
-            pass
+        defaults.update(load_json_file(SETTINGS_FILE, {}))
         self._json_response(defaults)
 
     def _handle_save_config(self):
@@ -42,12 +52,7 @@ class FsHandlerMixin:
         if not body or not isinstance(body, dict):
             return self._error_response("설정 데이터가 필요합니다", code="MISSING_FIELD")
 
-        current = {}
-        try:
-            if SETTINGS_FILE.exists():
-                current = json.loads(SETTINGS_FILE.read_text("utf-8"))
-        except (json.JSONDecodeError, OSError):
-            pass
+        current = load_json_file(SETTINGS_FILE, {})
 
         allowed_keys = {
             "skip_permissions", "allowed_tools", "model", "max_jobs",
@@ -59,23 +64,13 @@ class FsHandlerMixin:
                 current[k] = v
 
         try:
-            DATA_DIR.mkdir(parents=True, exist_ok=True)
-            SETTINGS_FILE.write_text(
-                json.dumps(current, ensure_ascii=False, indent=2), "utf-8"
-            )
+            atomic_json_save(SETTINGS_FILE, current)
             self._json_response({"ok": True, "config": current})
         except OSError as e:
             self._error_response(f"설정 저장 실패: {e}", 500, code="CONFIG_SAVE_FAILED")
 
     def _handle_get_skills(self):
-        try:
-            if SKILLS_FILE.exists():
-                data = json.loads(SKILLS_FILE.read_text("utf-8"))
-            else:
-                data = []
-            self._json_response(data)
-        except (json.JSONDecodeError, OSError):
-            self._json_response([])
+        self._json_response(load_json_file(SKILLS_FILE, []))
 
     def _handle_save_skills(self):
         body = self._read_body(allow_list=True)
@@ -105,23 +100,13 @@ class FsHandlerMixin:
             })
 
         try:
-            DATA_DIR.mkdir(parents=True, exist_ok=True)
-            SKILLS_FILE.write_text(
-                json.dumps(sanitized, ensure_ascii=False, indent=2), "utf-8"
-            )
+            atomic_json_save(SKILLS_FILE, sanitized)
             self._json_response({"ok": True, "skills": sanitized})
         except OSError as e:
             self._error_response(f"스킬 저장 실패: {e}", 500, code="SKILLS_SAVE_FAILED")
 
     def _handle_get_recent_dirs(self):
-        try:
-            if RECENT_DIRS_FILE.exists():
-                data = json.loads(RECENT_DIRS_FILE.read_text("utf-8"))
-            else:
-                data = []
-            self._json_response(data)
-        except (json.JSONDecodeError, OSError):
-            self._json_response([])
+        self._json_response(load_json_file(RECENT_DIRS_FILE, []))
 
     def _handle_save_recent_dirs(self):
         body = self._read_body()
@@ -130,8 +115,7 @@ class FsHandlerMixin:
             return self._error_response("dirs 배열이 필요합니다", code="MISSING_FIELD")
         dirs = [d for d in dirs if isinstance(d, str)][:8]
         try:
-            DATA_DIR.mkdir(parents=True, exist_ok=True)
-            RECENT_DIRS_FILE.write_text(json.dumps(dirs, ensure_ascii=False), "utf-8")
+            atomic_json_save(RECENT_DIRS_FILE, dirs)
             self._json_response({"ok": True})
         except OSError as e:
             self._error_response(f"저장 실패: {e}", 500, code="SAVE_FAILED")
@@ -204,6 +188,42 @@ class FsHandlerMixin:
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
         self._error_response(f"'{name}' 폴더를 찾을 수 없습니다", 404, code="DIR_NOT_FOUND")
+
+    def _handle_upload(self):
+        body = self._read_body()
+        data_b64 = body.get("data", "")
+        filename = body.get("filename", "file")
+
+        if not data_b64:
+            return self._error_response("data 필드가 필요합니다", code="MISSING_FIELD")
+        if "," in data_b64:
+            data_b64 = data_b64.split(",", 1)[1]
+
+        try:
+            raw = base64.b64decode(data_b64)
+        except Exception:
+            return self._error_response("잘못된 base64 데이터", code="INVALID_DATA")
+
+        ext = os.path.splitext(filename)[1].lower()
+        if ext not in ALLOWED_UPLOAD_EXTS:
+            return self._error_response(
+                f"허용되지 않는 파일 형식입니다: {ext or '(확장자 없음)'}",
+                400, code="INVALID_FILE_TYPE")
+        prefix = "img" if ext in IMAGE_EXTS else "file"
+        safe_name = f"{prefix}_{int(time.time())}_{os.getpid()}_{id(raw) % 10000}{ext}"
+
+        UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+        filepath = UPLOADS_DIR / safe_name
+        filepath.write_bytes(raw)
+
+        is_image = ext in IMAGE_EXTS
+        self._json_response({
+            "path": str(filepath),
+            "filename": safe_name,
+            "originalName": filename,
+            "size": len(raw),
+            "isImage": is_image,
+        }, 201)
 
     def _handle_mkdir(self):
         body = self._read_body()

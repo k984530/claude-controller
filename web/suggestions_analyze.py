@@ -11,15 +11,15 @@ import time
 import uuid
 from collections import Counter, defaultdict
 
-from config import LOGS_DIR
-from utils import parse_meta_file
+from config import SKILLS_FILE, SUGGESTIONS_FILE
+from utils import load_json_list, save_json_list, load_recent_meta
 
-from suggestions import (
-    _load_suggestions,
-    _save_suggestions,
-    _load_skills,
-)
-
+# ── 분석 임계값 ────────────────────────────────
+_MIN_REPEAT_COUNT = 3       # 반복 프롬프트 최소 횟수
+_MIN_FAIL_JOBS = 5          # 실패율 분석 최소 작업 수
+_MIN_FAIL_RATE = 0.3        # 실패율 분석 최소 비율
+_SKILL_OVERLAP_RATIO = 0.6  # 기존 스킬 키워드 겹침 스킵 비율
+_MIN_PERIODIC_COUNT = 3     # 주기적 작업 최소 횟수
 
 # ── 분석 & 제안 생성 ────────────────────────────
 
@@ -28,14 +28,14 @@ def generate_suggestions() -> list[dict]:
 
     기존 pending 제안과 중복되지 않도록 필터링한다.
     """
-    existing = _load_suggestions()
+    existing = load_json_list(SUGGESTIONS_FILE)
     existing_pending_keys = {
         s.get("dedup_key") for s in existing
         if s.get("status") == "pending" and s.get("dedup_key")
     }
 
-    jobs = _load_recent_jobs(limit=200)
-    skills = _load_skills()
+    jobs = load_recent_meta(limit=200)
+    skills = load_json_list(SKILLS_FILE)
     new_suggestions = []
 
     # 1. 반복 프롬프트 → 스킬 제안
@@ -52,26 +52,9 @@ def generate_suggestions() -> list[dict]:
 
     if new_suggestions:
         all_suggestions = existing + new_suggestions
-        _save_suggestions(all_suggestions)
+        save_json_list(SUGGESTIONS_FILE, all_suggestions)
 
     return new_suggestions
-
-
-def _load_recent_jobs(limit: int = 200) -> list[dict]:
-    """최근 작업 메타 데이터를 로드한다."""
-    if not LOGS_DIR.exists():
-        return []
-    meta_files = sorted(
-        LOGS_DIR.glob("job_*.meta"),
-        key=lambda f: f.stat().st_mtime,
-        reverse=True,
-    )[:limit]
-    jobs = []
-    for mf in meta_files:
-        meta = parse_meta_file(mf)
-        if meta:
-            jobs.append(meta)
-    return jobs
 
 
 def _normalize_prompt(prompt: str) -> str:
@@ -148,7 +131,7 @@ def _analyze_repeated_prompts(
                 skill_keywords.add(kw)
 
     for norm_key, group_jobs in prompt_groups.items():
-        if len(group_jobs) < 3:
+        if len(group_jobs) < _MIN_REPEAT_COUNT:
             continue
 
         # 대표 프롬프트에서 키워드 추출
@@ -157,7 +140,7 @@ def _analyze_repeated_prompts(
 
         # 기존 스킬과 키워드 겹침이 많으면 스킵
         overlap = len(set(keywords) & skill_keywords)
-        if overlap >= len(keywords) * 0.6 and keywords:
+        if overlap >= len(keywords) * _SKILL_OVERLAP_RATIO and keywords:
             continue
 
         dedup = f"new_skill:{norm_key[:60]}"
@@ -221,10 +204,10 @@ def _analyze_failure_patterns(
             project_stats[cwd]["failed"] += 1
 
     for cwd, stats in project_stats.items():
-        if stats["total"] < 5:
+        if stats["total"] < _MIN_FAIL_JOBS:
             continue
         fail_rate = stats["failed"] / stats["total"]
-        if fail_rate < 0.3:
+        if fail_rate < _MIN_FAIL_RATE:
             continue
 
         dedup = f"failure_pattern:{cwd}"
@@ -305,7 +288,7 @@ def _analyze_periodic_tasks(
         task_cwds[group_key] = cwd
 
     for group_key, timestamps in task_groups.items():
-        if len(timestamps) < 3:
+        if len(timestamps) < _MIN_PERIODIC_COUNT:
             continue
 
         timestamps.sort()

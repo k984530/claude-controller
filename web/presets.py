@@ -5,27 +5,18 @@ Presets — 전송 폼 프리셋 저장/불러오기
 
 import json
 import time
-from pathlib import Path
 
-from config import DATA_DIR, PRESETS_FILE, SKILLS_FILE
+from config import PRESETS_FILE
+from utils import load_json_list, save_json_list, find_skills_by_ids
 
 # ── 저장소 I/O ──────────────────────────────────────────────
 
 def _load() -> list[dict]:
-    if not PRESETS_FILE.exists():
-        return []
-    try:
-        data = json.loads(PRESETS_FILE.read_text("utf-8"))
-        return data if isinstance(data, list) else []
-    except (json.JSONDecodeError, OSError):
-        return []
+    return load_json_list(PRESETS_FILE)
 
 
 def _save(presets: list[dict]):
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    PRESETS_FILE.write_text(
-        json.dumps(presets, ensure_ascii=False, indent=2), "utf-8"
-    )
+    save_json_list(PRESETS_FILE, presets)
 
 
 def _find(preset_id: str) -> tuple[list[dict], dict | None, int]:
@@ -40,19 +31,7 @@ def _find(preset_id: str) -> tuple[list[dict], dict | None, int]:
 
 def _resolve_skill_names(skill_ids: list[str]) -> list[str]:
     """skill_ids → 사람이 읽을 수 있는 이름 목록."""
-    if not skill_ids or not SKILLS_FILE.exists():
-        return []
-    try:
-        cats = json.loads(SKILLS_FILE.read_text("utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return []
-    names = []
-    id_set = set(skill_ids)
-    for cat in cats:
-        for sk in cat.get("skills", []):
-            if sk.get("id") in id_set:
-                names.append(sk.get("name", sk["id"]))
-    return names
+    return [s.get("name", s["id"]) for s in find_skills_by_ids(skill_ids)]
 
 
 # ── 공개 API ────────────────────────────────────────────────

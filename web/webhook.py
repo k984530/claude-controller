@@ -16,19 +16,32 @@ import urllib.error
 from pathlib import Path
 
 
-# 경로 설정 — web/ 기준
+# ── 경로 설정 ────────────────────────────────
+# CLI 단독 실행(if __name__)과 모듈 임포트 양쪽을 지원한다.
+# 모듈 임포트 시에는 config.py의 상수를 사용하고,
+# CLI 단독 실행 시에는 __file__ 기준으로 경로를 계산한다.
+
 _WEB_DIR = Path(__file__).resolve().parent
-_CONTROLLER_DIR = _WEB_DIR.parent
-_DATA_DIR = _CONTROLLER_DIR / "data"
-_SETTINGS_FILE = _DATA_DIR / "settings.json"
-_LOGS_DIR = _CONTROLLER_DIR / "logs"
-_WEBHOOK_SENT_DIR = _DATA_DIR / "webhook_sent"
+
+try:
+    from config import DATA_DIR, LOGS_DIR, SETTINGS_FILE
+    from utils import parse_meta_file, parse_job_output
+except ImportError:
+    # CLI 단독 실행 시 fallback
+    sys.path.insert(0, str(_WEB_DIR))
+    _CONTROLLER_DIR = _WEB_DIR.parent
+    DATA_DIR = _CONTROLLER_DIR / "data"
+    LOGS_DIR = _CONTROLLER_DIR / "logs"
+    SETTINGS_FILE = DATA_DIR / "settings.json"
+    from utils import parse_meta_file, parse_job_output
+
+_WEBHOOK_SENT_DIR = DATA_DIR / "webhook_sent"
 
 
 def _load_settings():
     try:
-        if _SETTINGS_FILE.exists():
-            return json.loads(_SETTINGS_FILE.read_text("utf-8"))
+        if SETTINGS_FILE.exists():
+            return json.loads(SETTINGS_FILE.read_text("utf-8"))
     except (json.JSONDecodeError, OSError):
         pass
     return {}
@@ -36,43 +49,11 @@ def _load_settings():
 
 def _build_payload(job_id, status):
     """작업의 메타 + 결과를 읽어서 웹훅 페이로드를 생성한다."""
-    meta_file = _LOGS_DIR / f"job_{job_id}.meta"
-    out_file = _LOGS_DIR / f"job_{job_id}.out"
+    meta_file = LOGS_DIR / f"job_{job_id}.meta"
+    out_file = LOGS_DIR / f"job_{job_id}.out"
 
-    meta = {}
-    if meta_file.exists():
-        try:
-            for line in meta_file.read_text().splitlines():
-                if "=" in line:
-                    k, v = line.split("=", 1)
-                    meta[k.strip()] = v.strip().strip("'\"")
-        except OSError:
-            pass
-
-    # 결과 추출
-    result_text = None
-    cost_usd = None
-    duration_ms = None
-    session_id = None
-    is_error = False
-
-    if out_file.exists():
-        try:
-            for line in out_file.read_text().splitlines():
-                if '"type":"result"' not in line:
-                    continue
-                try:
-                    obj = json.loads(line)
-                    if obj.get("type") == "result":
-                        result_text = obj.get("result")
-                        cost_usd = obj.get("total_cost_usd")
-                        duration_ms = obj.get("duration_ms")
-                        session_id = obj.get("session_id")
-                        is_error = obj.get("is_error", False)
-                except json.JSONDecodeError:
-                    continue
-        except OSError:
-            pass
+    meta = parse_meta_file(meta_file) if meta_file.exists() else {}
+    parsed = parse_job_output(out_file)
 
     return {
         "event": f"job.{status}",
@@ -83,11 +64,11 @@ def _build_payload(job_id, status):
             "prompt": meta.get("PROMPT", ""),
             "cwd": meta.get("CWD") or None,
             "created_at": meta.get("CREATED_AT", ""),
-            "session_id": session_id or meta.get("SESSION_ID") or None,
-            "result": result_text,
-            "cost_usd": cost_usd,
-            "duration_ms": duration_ms,
-            "is_error": is_error,
+            "session_id": parsed["session_id"] or meta.get("SESSION_ID") or None,
+            "result": parsed["result"],
+            "cost_usd": parsed["cost_usd"],
+            "duration_ms": parsed["duration_ms"],
+            "is_error": parsed["is_error"],
         },
     }
 
@@ -159,6 +140,16 @@ def deliver_webhook(job_id, status):
         }
 
 
+def cleanup_test_marker():
+    """테스트 웹훅 전송 마커를 삭제한다. deliver_webhook 테스트 후 호출."""
+    marker = _WEBHOOK_SENT_DIR / "test-0000_done"
+    if marker.exists():
+        try:
+            marker.unlink()
+        except OSError:
+            pass
+
+
 def cleanup_sent_markers(max_age_seconds=86400):
     """오래된 전송 마커를 정리한다 (기본 24시간)."""
     if not _WEBHOOK_SENT_DIR.exists():
@@ -170,22 +161,6 @@ def cleanup_sent_markers(max_age_seconds=86400):
                 f.unlink()
         except OSError:
             pass
-
-
-# ════════════════════════════════════════════════
-#  DAG 디스패치 — 작업 완료 시 후속 pending 작업 자동 실행
-# ════════════════════════════════════════════════
-
-def _dispatch_pending_after_completion():
-    """작업 완료 후 의존성이 충족된 pending 작업을 디스패치한다."""
-    try:
-        sys.path.insert(0, str(_WEB_DIR))
-        from jobs import dispatch_pending_jobs
-        dispatched = dispatch_pending_jobs()
-        if dispatched:
-            print(f"DAG dispatch: {dispatched}", file=sys.stderr)
-    except Exception as e:
-        print(f"DAG dispatch error: {e}", file=sys.stderr)
 
 
 # CLI 진입점: python3 webhook.py <job_id> <status>
@@ -206,4 +181,10 @@ if __name__ == "__main__":
         print(json.dumps(result, ensure_ascii=False))
 
     # 작업 완료 후 DAG 의존성 체인 처리
-    _dispatch_pending_after_completion()
+    try:
+        from job_deps import dispatch_pending_jobs
+        dispatched = dispatch_pending_jobs()
+        if dispatched:
+            print(f"DAG dispatch: {dispatched}", file=sys.stderr)
+    except Exception as e:
+        print(f"DAG dispatch error: {e}", file=sys.stderr)

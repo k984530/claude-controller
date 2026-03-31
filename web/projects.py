@@ -6,25 +6,19 @@ Controller Service — 프로젝트 관리
 저장: data/projects.json
 """
 
-import json
 import os
 import subprocess
 import time
 
 from config import DATA_DIR, LOGS_DIR
-from utils import parse_meta_file, generate_id
+from utils import parse_meta_file, generate_id, load_json_file, is_pid_alive
 
 PROJECTS_FILE = DATA_DIR / "projects.json"
 
 
 def _load_projects() -> list[dict]:
     """프로젝트 목록을 파일에서 읽는다."""
-    try:
-        if PROJECTS_FILE.exists():
-            return json.loads(PROJECTS_FILE.read_text("utf-8"))
-    except (json.JSONDecodeError, OSError):
-        pass
-    return []
+    return load_json_file(PROJECTS_FILE, [])
 
 
 def _save_projects(projects: list[dict]):
@@ -56,12 +50,8 @@ def _collect_job_stats_by_cwd() -> dict:
         s["total"] += 1
         status = meta.get("STATUS", "unknown")
         if status == "running":
-            pid = meta.get("PID")
-            if pid:
-                try:
-                    os.kill(int(pid), 0)
-                except (ProcessLookupError, ValueError, OSError):
-                    status = "done"
+            if not is_pid_alive(meta.get("PID")):
+                status = "done"
         if status == "running":
             s["running"] += 1
         elif status == "done":

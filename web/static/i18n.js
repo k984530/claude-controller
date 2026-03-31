@@ -21,6 +21,11 @@ function applyI18n() {
     const text = t(key);
     if (text) el.placeholder = text;
   });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    const key = el.getAttribute('data-i18n-title');
+    const text = t(key);
+    if (text) el.title = text;
+  });
   document.documentElement.lang = _currentLocale.split('-')[0];
   document.documentElement.setAttribute('data-locale', _currentLocale);
 }

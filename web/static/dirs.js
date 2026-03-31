@@ -56,7 +56,7 @@ function renderRecentDirs() {
     return;
   }
 
-  let html = '<span class="recent-dirs-label">최근</span>';
+  let html = '<span class="recent-dirs-label">' + t('recent_label') + '</span>';
   html += dirs.map(dir => {
     const parts = dir.replace(/\/+$/, '').split('/');
     const name = parts[parts.length - 1] || dir;
@@ -64,7 +64,7 @@ function renderRecentDirs() {
     const escapedDir = dir.replace(/'/g, "\\'");
     return `<span class="recent-chip${isActive}" onclick="selectRecentDir('${escapedDir}')" title="${dir}">
       <span class="recent-chip-name">${name}</span>
-      <button class="recent-chip-remove" onclick="event.stopPropagation(); removeRecentDir('${escapedDir}')" title="제거">
+      <button class="recent-chip-remove" onclick="event.stopPropagation(); removeRecentDir('${escapedDir}')" title="${t('remove')}">
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </span>`;
@@ -127,7 +127,7 @@ async function browseTo(path) {
   const breadcrumb = document.getElementById('dirBreadcrumb');
   const currentDisplay = document.getElementById('dirCurrentPath');
 
-  list.innerHTML = '<div class="dir-modal-loading"><span class="spinner"></span> 불러오는 중...</div>';
+  list.innerHTML = `<div class="dir-modal-loading"><span class="spinner"></span> ${t('loading_text')}</div>`;
 
   try {
     const data = await apiFetch(`/api/dirs?path=${encodeURIComponent(path)}`);
@@ -139,7 +139,7 @@ async function browseTo(path) {
 
     const dirs = data.entries.filter(e => e.type === 'dir');
     if (dirs.length === 0) {
-      list.innerHTML = '<div class="dir-modal-loading" style="color:var(--text-muted);">하위 디렉토리가 없습니다</div>';
+      list.innerHTML = `<div class="dir-modal-loading" style="color:var(--text-muted);">${t('no_subdirs')}</div>`;
       return;
     }
 
@@ -148,7 +148,7 @@ async function browseTo(path) {
       const icon = isParent
         ? '<svg class="dir-item-icon is-parent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>'
         : '<svg class="dir-item-icon is-dir" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
-      const label = isParent ? '상위 디렉토리' : entry.name;
+      const label = isParent ? t('parent_dir') : entry.name;
       return `<div class="dir-item" onclick="browseTo('${entry.path.replace(/'/g, "\\'")}')">
         ${icon}
         <span class="dir-item-name is-dir">${label}</span>
@@ -156,7 +156,7 @@ async function browseTo(path) {
     }).join('');
 
   } catch (err) {
-    list.innerHTML = `<div class="dir-modal-loading" style="color:var(--red);">불러오기 실패: ${err.message}</div>`;
+    list.innerHTML = `<div class="dir-modal-loading" style="color:var(--red);">${t('dir_load_failed')}: ${err.message}</div>`;
   }
 }
 
@@ -424,7 +424,7 @@ document.addEventListener('keydown', function(e) {
     } catch { /* 서버 검색도 실패 */ }
 
     // 최종 실패 시 디렉토리 브라우저 열기
-    showToast(`"${folderName}" 자동 검색 실패 — 직접 선택해주세요.`, 'error');
+    showToast(`"${folderName}" ${t('dir_search_failed')}`, 'error');
     if (typeof toggleDirBrowser === 'function') toggleDirBrowser();
   }
 
@@ -448,7 +448,7 @@ document.addEventListener('keydown', function(e) {
           showToast(`CWD: ${data.current}`);
           }
       } catch {
-        showToast('경로를 인식할 수 없습니다', 'error');
+        showToast(t('dir_path_unknown'), 'error');
       }
     }
   }

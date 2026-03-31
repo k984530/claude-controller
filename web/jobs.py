@@ -7,7 +7,7 @@ import os
 import time
 
 from config import LOGS_DIR, FIFO_PATH
-from utils import parse_meta_file
+from utils import parse_meta_file, is_pid_alive, correct_running_status, parse_job_output
 from error_classify import classify_error
 from job_deps import check_dependencies, create_pending_job
 
@@ -16,19 +16,16 @@ from job_deps import dispatch_pending_jobs  # noqa: F401
 from service_ctl import start_controller_service, stop_controller_service, cleanup_old_jobs  # noqa: F401
 
 
-def get_all_jobs(cwd_filter=None):
-    """logs/ 디렉토리의 모든 .meta 파일을 파싱하여 작업 목록을 반환한다.
+def iter_job_metas(cwd_filter=None):
+    """logs/ 디렉토리의 .meta 파일을 순회하며 (meta_dict, meta_file) 쌍을 yield한다.
 
-    Args:
-        cwd_filter: 지정하면 해당 경로(또는 하위)에서 실행된 작업만 반환한다.
+    상태 보정(correct_running_status)이 적용된 meta를 반환한다.
+    cwd_filter가 지정되면 해당 경로(또는 하위)에서 실행된 작업만 반환한다.
     """
-    jobs = []
     if not LOGS_DIR.exists():
-        return jobs
+        return
 
-    # cwd_filter 정규화
-    if cwd_filter:
-        cwd_filter = os.path.normpath(os.path.expanduser(cwd_filter))
+    norm_filter = os.path.normpath(os.path.expanduser(cwd_filter)) if cwd_filter else None
 
     meta_files = sorted(LOGS_DIR.glob("job_*.meta"),
                         key=lambda f: int(f.stem.split("_")[1]),
@@ -38,97 +35,106 @@ def get_all_jobs(cwd_filter=None):
         if not meta:
             continue
 
-        # cwd 필터 적용
-        if cwd_filter:
+        if norm_filter:
             job_cwd = meta.get("CWD", "")
-            if job_cwd:
-                job_cwd_norm = os.path.normpath(job_cwd)
-                if not (job_cwd_norm == cwd_filter or job_cwd_norm.startswith(cwd_filter + os.sep)):
-                    continue
-            else:
+            if not job_cwd:
+                continue
+            job_cwd_norm = os.path.normpath(job_cwd)
+            if not (job_cwd_norm == norm_filter or job_cwd_norm.startswith(norm_filter + os.sep)):
                 continue
 
-        if meta.get("STATUS") == "running" and meta.get("PID"):
-            try:
-                os.kill(int(meta["PID"]), 0)
-            except (ProcessLookupError, ValueError, OSError):
-                meta["STATUS"] = "done"
+        meta["STATUS"] = correct_running_status(meta)
+        yield meta, mf
 
-        # 실행 중인 작업의 session_id 조기 추출 시도
-        if not meta.get("SESSION_ID") and meta.get("STATUS") == "running":
-            out_file_early = LOGS_DIR / f"job_{meta.get('JOB_ID', '')}.out"
-            if out_file_early.exists():
-                try:
-                    with open(out_file_early, "r") as ef:
-                        for eline in ef:
-                            try:
-                                eobj = json.loads(eline.strip())
-                                sid_early = eobj.get("session_id")
-                                if sid_early:
-                                    meta["SESSION_ID"] = sid_early
-                                    break
-                            except json.JSONDecodeError:
-                                continue
-                except OSError:
-                    pass
 
-        result_text = None
-        cost_usd = None
-        duration_ms = None
+def _build_job_entry(meta: dict) -> dict:
+    """보정된 meta dict로부터 API 응답용 job entry를 조립한다."""
+    job_id_str = meta.get("JOB_ID", "")
+    out_file = LOGS_DIR / f"job_{job_id_str}.out"
+    parsed_out = parse_job_output(out_file)
+
+    # session_id 보완: meta에 없으면 out 파일에서 추출
+    if not meta.get("SESSION_ID") and parsed_out.get("session_id"):
+        meta["SESSION_ID"] = parsed_out["session_id"]
+
+    is_terminal = meta.get("STATUS") in ("done", "failed")
+    result_text = parsed_out["result"] if is_terminal else None
+    cost_usd = parsed_out["cost_usd"] if is_terminal else None
+    duration_ms = parsed_out["duration_ms"] if is_terminal else None
+
+    # 의존성 정보 추출
+    deps_str = meta.get("DEPENDS_ON", "")
+    depends_on = [d.strip() for d in deps_str.split(",") if d.strip()] if deps_str else None
+
+    entry = {
+        "job_id":      job_id_str,
+        "status":      meta.get("STATUS", "unknown"),
+        "session_id":  meta.get("SESSION_ID", "") or None,
+        "prompt":      meta.get("PROMPT", ""),
+        "created_at":  meta.get("CREATED_AT", ""),
+        "uuid":        meta.get("UUID", "") or None,
+        "cwd":         meta.get("CWD", "") or None,
+        "result":      result_text,
+        "cost_usd":    cost_usd,
+        "duration_ms": duration_ms,
+        "depends_on":  depends_on,
+        "origin_type": meta.get("ORIGIN_TYPE") or None,
+        "origin_id":   meta.get("ORIGIN_ID") or None,
+        "origin_name": meta.get("ORIGIN_NAME") or None,
+    }
+    if meta.get("STATUS") == "failed" and result_text:
+        entry["user_error"] = classify_error(result_text)
+    return entry
+
+
+def get_all_jobs(cwd_filter=None):
+    """logs/ 디렉토리의 모든 .meta 파일을 파싱하여 작업 목록을 반환한다.
+
+    Args:
+        cwd_filter: 지정하면 해당 경로(또는 하위)에서 실행된 작업만 반환한다.
+    """
+    return [_build_job_entry(meta) for meta, _ in iter_job_metas(cwd_filter)]
+
+
+def _parse_created_ts(meta: dict, meta_file) -> float:
+    """meta의 CREATED_AT을 Unix timestamp로 파싱한다. 실패 시 파일 mtime 사용."""
+    created_at = meta.get("CREATED_AT", "")
+    if created_at:
+        try:
+            if created_at.replace(".", "").isdigit():
+                return float(created_at)
+            return time.mktime(time.strptime(created_at, "%Y-%m-%d %H:%M:%S"))
+        except (ValueError, OverflowError):
+            pass
+    try:
+        return meta_file.stat().st_mtime
+    except OSError:
+        return 0
+
+
+def _accumulate_job_stats(meta, status, acc):
+    """개별 작업의 통계를 누적기(acc)에 반영한다."""
+    acc["total"] += 1
+    if status in ("running", "done", "failed"):
+        acc[status] += 1
+
+    cwd = meta.get("CWD", "") or "unknown"
+    if cwd not in acc["by_cwd"]:
+        acc["by_cwd"][cwd] = {"total": 0, "done": 0, "failed": 0}
+    acc["by_cwd"][cwd]["total"] += 1
+    if status in ("done", "failed"):
+        acc["by_cwd"][cwd][status] += 1
+
+    if status in ("done", "failed"):
         job_id_str = meta.get("JOB_ID", "")
-        if meta.get("STATUS") in ("done", "failed"):
-            out_file = LOGS_DIR / f"job_{job_id_str}.out"
-            if out_file.exists():
-                try:
-                    with open(out_file, "r") as f:
-                        for line in f:
-                            try:
-                                obj = json.loads(line.strip())
-                                if obj.get("type") == "result":
-                                    result_text = obj.get("result", "")
-                                    cost_usd = obj.get("total_cost_usd")
-                                    duration_ms = obj.get("duration_ms")
-                                if not meta.get("SESSION_ID") and obj.get("session_id"):
-                                    meta["SESSION_ID"] = obj["session_id"]
-                            except json.JSONDecodeError:
-                                continue
-                    if result_text is None:
-                        try:
-                            data = json.loads(out_file.read_text())
-                            result_text = data.get("result", "")
-                            cost_usd = data.get("total_cost_usd")
-                            duration_ms = data.get("duration_ms")
-                            if not meta.get("SESSION_ID") and data.get("session_id"):
-                                meta["SESSION_ID"] = data["session_id"]
-                        except (json.JSONDecodeError, OSError):
-                            pass
-                except OSError:
-                    pass
-
-        # 의존성 정보 추출
-        deps_str = meta.get("DEPENDS_ON", "")
-        depends_on = [d.strip() for d in deps_str.split(",") if d.strip()] if deps_str else None
-
-        job_entry = {
-            "job_id":      job_id_str,
-            "status":      meta.get("STATUS", "unknown"),
-            "session_id":  meta.get("SESSION_ID", "") or None,
-            "prompt":      meta.get("PROMPT", ""),
-            "created_at":  meta.get("CREATED_AT", ""),
-            "uuid":        meta.get("UUID", "") or None,
-            "cwd":         meta.get("CWD", "") or None,
-            "result":      result_text,
-            "cost_usd":    cost_usd,
-            "duration_ms": duration_ms,
-            "depends_on":  depends_on,
-            "origin_type": meta.get("ORIGIN_TYPE") or None,
-            "origin_id":   meta.get("ORIGIN_ID") or None,
-            "origin_name": meta.get("ORIGIN_NAME") or None,
-        }
-        if meta.get("STATUS") == "failed" and result_text:
-            job_entry["user_error"] = classify_error(result_text)
-        jobs.append(job_entry)
-    return jobs
+        out_file = LOGS_DIR / f"job_{job_id_str}.out"
+        parsed_out = parse_job_output(out_file)
+        if parsed_out["cost_usd"] is not None:
+            acc["total_cost"] += parsed_out["cost_usd"]
+            acc["cost_count"] += 1
+        if parsed_out["duration_ms"] is not None:
+            acc["total_duration"] += parsed_out["duration_ms"]
+            acc["duration_count"] += 1
 
 
 def get_stats(from_ts=None, to_ts=None):
@@ -141,122 +147,31 @@ def get_stats(from_ts=None, to_ts=None):
     if to_ts is None:
         to_ts = time.time()
 
-    total = 0
-    running = 0
-    done = 0
-    failed = 0
-    total_cost = 0.0
-    total_duration = 0.0
-    cost_count = 0
-    duration_count = 0
-    by_cwd = {}
+    acc = {
+        "total": 0, "running": 0, "done": 0, "failed": 0,
+        "total_cost": 0.0, "total_duration": 0.0,
+        "cost_count": 0, "duration_count": 0, "by_cwd": {},
+    }
 
-    if not LOGS_DIR.exists():
-        return _build_stats_response(
-            total, running, done, failed,
-            total_cost, cost_count, total_duration, duration_count, by_cwd,
-            from_ts, to_ts,
-        )
-
-    for mf in LOGS_DIR.glob("job_*.meta"):
-        meta = parse_meta_file(mf)
-        if not meta:
-            continue
-
-        # 기간 필터: CREATED_AT 파싱
-        created_at = meta.get("CREATED_AT", "")
-        if created_at:
-            try:
-                ts = float(created_at) if created_at.replace(".", "").isdigit() else time.mktime(time.strptime(created_at, "%Y-%m-%d %H:%M:%S"))
-            except (ValueError, OverflowError):
-                ts = 0
-        else:
-            # CREATED_AT이 없으면 파일 mtime 사용
-            try:
-                ts = mf.stat().st_mtime
-            except OSError:
-                ts = 0
-
-        if from_ts and ts < from_ts:
-            continue
-        if ts > to_ts:
-            continue
-
-        total += 1
-        status = meta.get("STATUS", "unknown")
-
-        # 실행 중이지만 프로세스가 죽은 경우 보정
-        if status == "running" and meta.get("PID"):
-            try:
-                os.kill(int(meta["PID"]), 0)
-            except (ProcessLookupError, ValueError, OSError):
-                status = "done"
-
-        if status == "running":
-            running += 1
-        elif status == "done":
-            done += 1
-        elif status == "failed":
-            failed += 1
-
-        # cwd별 카운트
-        cwd = meta.get("CWD", "") or "unknown"
-        if cwd not in by_cwd:
-            by_cwd[cwd] = {"total": 0, "done": 0, "failed": 0}
-        by_cwd[cwd]["total"] += 1
-        if status == "done":
-            by_cwd[cwd]["done"] += 1
-        elif status == "failed":
-            by_cwd[cwd]["failed"] += 1
-
-        # 완료/실패 작업에서 비용·소요시간 추출
-        if status in ("done", "failed"):
-            job_id_str = meta.get("JOB_ID", "")
-            out_file = LOGS_DIR / f"job_{job_id_str}.out"
-            cost, dur = _extract_cost_duration(out_file)
-            if cost is not None:
-                total_cost += cost
-                cost_count += 1
-            if dur is not None:
-                total_duration += dur
-                duration_count += 1
+    if LOGS_DIR.exists():
+        for mf in LOGS_DIR.glob("job_*.meta"):
+            meta = parse_meta_file(mf)
+            if not meta:
+                continue
+            ts = _parse_created_ts(meta, mf)
+            if from_ts and ts < from_ts:
+                continue
+            if ts > to_ts:
+                continue
+            _accumulate_job_stats(meta, correct_running_status(meta), acc)
 
     return _build_stats_response(
-        total, running, done, failed,
-        total_cost, cost_count, total_duration, duration_count, by_cwd,
-        from_ts, to_ts,
+        acc["total"], acc["running"], acc["done"], acc["failed"],
+        acc["total_cost"], acc["cost_count"],
+        acc["total_duration"], acc["duration_count"],
+        acc["by_cwd"], from_ts, to_ts,
     )
 
-
-def _extract_cost_duration(out_file):
-    """out 파일에서 cost_usd와 duration_ms를 추출한다."""
-    if not out_file.exists():
-        return None, None
-    cost = None
-    dur = None
-    try:
-        with open(out_file, "r") as f:
-            for line in f:
-                if '"type":"result"' not in line:
-                    continue
-                try:
-                    obj = json.loads(line)
-                    if obj.get("type") == "result":
-                        cost = obj.get("total_cost_usd")
-                        dur = obj.get("duration_ms")
-                except json.JSONDecodeError:
-                    continue
-        # fallback: 전체 파일이 단일 JSON인 경우
-        if cost is None:
-            try:
-                data = json.loads(out_file.read_text())
-                cost = data.get("total_cost_usd")
-                dur = data.get("duration_ms")
-            except (json.JSONDecodeError, OSError):
-                pass
-    except OSError:
-        pass
-    return cost, dur
 
 
 def _build_stats_response(total, running, done, failed,
@@ -299,63 +214,33 @@ def get_job_result(job_id):
         return None, "작업을 찾을 수 없습니다"
 
     meta = parse_meta_file(meta_file)
-    if meta.get("STATUS") == "running":
-        # 프로세스가 실제로 살아있는지 확인 — meta가 running이지만 PID가 죽었으면 done 처리
-        pid = meta.get("PID")
-        if pid:
-            try:
-                os.kill(int(pid), 0)
-            except (ProcessLookupError, ValueError, OSError):
-                meta["STATUS"] = "done"
-        if meta.get("STATUS") == "running":
-            return {"status": "running", "result": None}, None
+    status = correct_running_status(meta)
+    meta["STATUS"] = status
+
+    if status == "running":
+        return {"status": "running", "result": None}, None
 
     if not out_file.exists():
         return None, "출력 파일이 없습니다"
 
+    parsed = parse_job_output(out_file)
+    if parsed["result"] is not None:
+        resp = {
+            "status":      status,
+            "result":      parsed["result"],
+            "cost_usd":    parsed["cost_usd"],
+            "duration_ms": parsed["duration_ms"],
+            "session_id":  parsed["session_id"],
+            "is_error":    parsed["is_error"],
+        }
+        if resp["is_error"] or status == "failed":
+            resp["user_error"] = classify_error(parsed["result"] or "")
+        return resp, None
+
+    # fallback: 파싱 실패 시 원본 텍스트 일부 반환
     try:
-        with open(out_file, "r") as f:
-            content = f.read()
-
-        result_data = None
-        for line in content.strip().split("\n"):
-            try:
-                obj = json.loads(line)
-                if obj.get("type") == "result":
-                    result_data = obj
-            except json.JSONDecodeError:
-                continue
-
-        if result_data:
-            resp = {
-                "status":      meta.get("STATUS", "unknown"),
-                "result":      result_data.get("result"),
-                "cost_usd":    result_data.get("total_cost_usd"),
-                "duration_ms": result_data.get("duration_ms"),
-                "session_id":  result_data.get("session_id"),
-                "is_error":    result_data.get("is_error", False),
-            }
-            if resp["is_error"] or meta.get("STATUS") == "failed":
-                resp["user_error"] = classify_error(result_data.get("result", ""))
-            return resp, None
-
-        try:
-            data = json.loads(content)
-            resp = {
-                "status":      meta.get("STATUS", "unknown"),
-                "result":      data.get("result"),
-                "cost_usd":    data.get("total_cost_usd"),
-                "duration_ms": data.get("duration_ms"),
-                "session_id":  data.get("session_id"),
-                "is_error":    data.get("is_error", False),
-            }
-            if resp["is_error"] or meta.get("STATUS") == "failed":
-                resp["user_error"] = classify_error(data.get("result", ""))
-            return resp, None
-        except json.JSONDecodeError:
-            pass
-
-        return {"status": meta.get("STATUS", "unknown"), "result": content[:2000]}, None
+        content = out_file.read_text()[:2000]
+        return {"status": status, "result": content}, None
     except OSError as e:
         return None, f"결과 파싱 실패: {e}"
 
@@ -428,7 +313,7 @@ def get_results(origin_type=None, origin_id=None, limit=20):
             groups[key] = {
                 "origin_type": otype,
                 "origin_id": oid or None,
-                "origin_name": job.get("origin_name") or ("직접 입력" if otype == "manual" else oid),
+                "origin_name": job.get("origin_name") or oid,
                 "total": 0,
                 "done": 0,
                 "failed": 0,

@@ -95,12 +95,6 @@ class TaskDAG:
                     return False, f"Task '{node.id}' depends on unknown task '{dep}'"
 
         # 순환 감지 (Kahn's algorithm)
-        in_degree = {nid: 0 for nid in self.nodes}
-        for nid, node in self.nodes.items():
-            for dep in node.depends_on:
-                in_degree[nid] += 1  # 아닌, 이미 위에서 계산
-
-        # 재계산
         in_degree = {nid: len(self._rev.get(nid, [])) for nid in self.nodes}
         queue = deque(nid for nid, deg in in_degree.items() if deg == 0)
         visited = 0

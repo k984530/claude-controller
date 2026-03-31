@@ -63,19 +63,25 @@ MIME_TYPES = {
 class ResponseMixin:
     """JSON 응답·에러 응답·요청 본문 읽기 헬퍼."""
 
-    def _json_response(self, data, status=200):
+    def _json_response(self, data, status=200, extra_headers=None):
         body = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self._set_cors_headers()
+        if extra_headers:
+            for key, value in extra_headers.items():
+                self.send_header(key, value)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
 
-    def _error_response(self, message, status=400, code=None):
+    def _error_response(self, message, status=400, code=None, extra_headers=None):
         if code is None:
             code = _STATUS_TO_CODE.get(status, "UNKNOWN_ERROR")
-        self._json_response({"error": {"code": code, "message": message}}, status)
+        self._json_response(
+            {"error": {"code": code, "message": message}},
+            status, extra_headers=extra_headers,
+        )
 
     _MAX_BODY_SIZE = 10 * 1024 * 1024  # 10 MB
 
@@ -151,22 +157,14 @@ class SecurityMixin:
         return False
 
     def _send_forbidden(self, message="Forbidden"):
-        body = json.dumps({"error": {"code": "FORBIDDEN", "message": message}}, ensure_ascii=False).encode("utf-8")
-        self.send_response(403)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        self._error_response(message, 403, code="FORBIDDEN")
 
     def _send_unauthorized(self):
-        body = json.dumps({"error": {"code": "AUTH_REQUIRED", "message": "인증이 필요합니다. Authorization 헤더에 토큰을 포함하세요."}}, ensure_ascii=False).encode("utf-8")
-        self.send_response(401)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("WWW-Authenticate", "Bearer")
-        self.send_header("Content-Length", str(len(body)))
-        self._set_cors_headers()
-        self.end_headers()
-        self.wfile.write(body)
+        self._error_response(
+            "인증이 필요합니다. Authorization 헤더에 토큰을 포함하세요.",
+            401, code="AUTH_REQUIRED",
+            extra_headers={"WWW-Authenticate": "Bearer"},
+        )
 
 
 class StaticServeMixin:

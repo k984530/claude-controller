@@ -39,7 +39,9 @@ async function init() {
   applyI18n();
   applyTheme(localStorage.getItem('theme') || 'dark');
   await autoConnect();
-  loadRecentDirs();
+  await loadRecentDirs();
+  _restoreContext();
+  _restoreLanes();
   fetchPipelines();
   checkStatus();
   fetchRegisteredProjects();
@@ -59,7 +61,7 @@ async function init() {
   promptInput.addEventListener('keydown', function(e) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      document.getElementById('sendForm').dispatchEvent(new Event('submit'));
+      sendAll(e);
     }
   });
 

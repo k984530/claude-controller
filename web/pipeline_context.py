@@ -79,12 +79,14 @@ def get_git_diff_stat(project_path: str) -> str:
 
 # ── Pre-dispatch 스킵 가드 ──────────────────────────────────
 
+_SKIP_IDLE_THRESHOLD = 2  # 연속 무변경 N회 이상이면 스킵
+
 def should_skip_dispatch(pipe: dict) -> tuple[bool, str]:
     """Pre-dispatch 스킵 판단. 반환: (skip 여부, 사유).
 
     스킵 조건:
     1. git HEAD와 dirty hash가 이전 실행과 동일 (코드 변경 없음)
-    2. 이전 결과가 no_change이고 연속 무변경 2회 이상
+    2. 이전 결과가 no_change이고 연속 무변경 _SKIP_IDLE_THRESHOLD회 이상
     """
     project_path = pipe["project_path"]
     current_snapshot = get_git_snapshot(project_path)
@@ -97,15 +99,9 @@ def should_skip_dispatch(pipe: dict) -> tuple[bool, str]:
     if not history:
         return False, ""  # 첫 실행
 
-    consecutive_idle = 0
-    for h in reversed(history):
-        cls = h.get("classification", "unknown")
-        if cls in ("no_change", "unknown"):
-            consecutive_idle += 1
-        else:
-            break
+    consecutive_idle = count_consecutive_idle(pipe)
 
-    if consecutive_idle >= 2:
+    if consecutive_idle >= _SKIP_IDLE_THRESHOLD:
         return True, f"git 변경 없음 + 연속 {consecutive_idle}회 무변경"
 
     return False, ""

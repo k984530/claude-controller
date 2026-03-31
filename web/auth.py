@@ -18,7 +18,6 @@ _cached_token: str | None = None
 def generate_token() -> str:
     """새 토큰을 생성하고 파일에 저장한다."""
     global _cached_token
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
     token = secrets.token_urlsafe(32)
     TOKEN_FILE.write_text(token, "utf-8")
     # 토큰 파일 권한을 소유자만 읽기/쓰기로 제한

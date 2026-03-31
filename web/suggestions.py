@@ -11,40 +11,18 @@ Suggestion Engine — 스킬/자동화 개선 제안 생성 및 관리
   - cleanup       : 미사용 스킬/파이프라인 정리 제안
 """
 
-import json
 import time
-from pathlib import Path
 
-from config import SKILLS_FILE, DATA_DIR
-
-
-SUGGESTIONS_FILE = DATA_DIR / "suggestions.json"
-
-# ── JSON list I/O (공통 헬퍼) ─────────────────
-
-def _load_json_list(filepath: Path) -> list[dict]:
-    if not filepath.exists():
-        return []
-    try:
-        data = json.loads(filepath.read_text("utf-8"))
-        return data if isinstance(data, list) else []
-    except (json.JSONDecodeError, OSError):
-        return []
-
-
-def _save_json_list(filepath: Path, items: list[dict]):
-    filepath.parent.mkdir(parents=True, exist_ok=True)
-    filepath.write_text(
-        json.dumps(items, ensure_ascii=False, indent=2), "utf-8",
-    )
+from config import SKILLS_FILE, SUGGESTIONS_FILE
+from utils import load_json_list, save_json_list
 
 
 def _load_suggestions() -> list[dict]:
-    return _load_json_list(SUGGESTIONS_FILE)
+    return load_json_list(SUGGESTIONS_FILE)
 
 
 def _save_suggestions(suggestions: list[dict]):
-    _save_json_list(SUGGESTIONS_FILE, suggestions)
+    save_json_list(SUGGESTIONS_FILE, suggestions)
 
 
 def list_suggestions(status: str | None = None) -> list[dict]:
@@ -103,18 +81,12 @@ def apply_suggestion(suggestion_id: str) -> tuple[dict | None, str | None]:
     action = target.get("action", {})
     action_type = action.get("type", "")
 
-    try:
-        if action_type == "new_skill":
-            result = _apply_new_skill(action.get("payload", {}))
-        elif action_type == "improve_skill":
-            result = _apply_improve_skill(action.get("payload", {}))
-        elif action_type == "new_pipeline":
-            result = _apply_new_pipeline(action.get("payload", {}))
-        elif action_type == "cleanup_skill":
-            result = _apply_cleanup_skill(action.get("payload", {}))
-        else:
-            return None, f"알 수 없는 액션 유형: {action_type}"
+    handler = _ACTION_HANDLERS.get(action_type)
+    if not handler:
+        return None, f"알 수 없는 액션 유형: {action_type}"
 
+    try:
+        result = handler(action.get("payload", {}))
         target["status"] = "applied"
         target["updated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
         _save_suggestions(suggestions)
@@ -201,14 +173,24 @@ def _apply_cleanup_skill(payload: dict) -> dict:
     return {"removed_skill": removed}
 
 
+# ── 액션 핸들러 레지스트리 (OCP: 새 유형 추가 시 dict에 등록만 하면 됨) ──
+
+_ACTION_HANDLERS = {
+    "new_skill": _apply_new_skill,
+    "improve_skill": _apply_improve_skill,
+    "new_pipeline": _apply_new_pipeline,
+    "cleanup_skill": _apply_cleanup_skill,
+}
+
+
 # ── Skills I/O ────────────────────────────────
 
 def _load_skills() -> list[dict]:
-    return _load_json_list(SKILLS_FILE)
+    return load_json_list(SKILLS_FILE)
 
 
 def _save_skills(skills: list[dict]):
-    _save_json_list(SKILLS_FILE, skills)
+    save_json_list(SKILLS_FILE, skills)
 
 
 # ── 분석 엔진 (suggestions_analyze 에서 re-export) ────────────

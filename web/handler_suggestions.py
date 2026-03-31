@@ -10,6 +10,8 @@ Suggestion HTTP 핸들러 Mixin
   - POST   /api/suggestions/clear        # 무시된 제안 일괄 삭제
 """
 
+from urllib.parse import parse_qs
+
 import suggestions as _sug_mod
 
 
@@ -17,7 +19,6 @@ class SuggestionHandlerMixin:
 
     def _handle_list_suggestions(self, parsed):
         """GET /api/suggestions?status=pending"""
-        from urllib.parse import parse_qs
         qs = parse_qs(parsed.query)
         status = qs.get("status", [None])[0]
         self._json_response(_sug_mod.list_suggestions(status=status))

@@ -111,7 +111,7 @@ function renderPipelines() {
   if (countEl) countEl.textContent = _pipelines.length > 0 ? `(${_pipelines.length})` : '';
 
   if (_pipelines.length === 0) {
-    container.innerHTML = '<div class="empty-state" style="padding:20px;text-align:center;color:var(--text-muted);font-size:0.8rem;">자동화가 없습니다.</div>';
+    container.innerHTML = '<div class="empty-state" style="padding:20px;text-align:center;color:var(--text-muted);font-size:0.8rem;">' + t('pipe_no_items') + '</div>';
     return;
   }
 
@@ -128,17 +128,17 @@ function renderPipelines() {
       timerHtml = `<span data-pipe-timer="${p.id}" style="font-family:var(--font-mono,monospace);font-size:0.72rem;color:var(--text-muted);">${_formatTimer(remaining)}</span>`;
     }
 
-    const cmdPreview = (p.command || '').substring(0, 80) + ((p.command || '').length > 80 ? '...' : '');
+    const cmdPreview = truncate(p.command, 80);
     const projectName = p.project_path ? p.project_path.split('/').filter(Boolean).pop() : '';
     const projectPath = p.project_path || '';
 
     let intervalLabel = '';
     if (p.interval) {
-      intervalLabel = `<span style="font-size:0.65rem;padding:1px 5px;background:rgba(59,130,246,0.1);color:var(--primary);border-radius:3px;">${escapeHtml(p.interval)} 반복</span>`;
+      intervalLabel = `<span style="font-size:0.65rem;padding:1px 5px;background:rgba(59,130,246,0.1);color:var(--primary);border-radius:3px;">${escapeHtml(p.interval)} ${t('pipe_repeat')}</span>`;
     }
 
     // 체이닝 표시
-    const chainLabel = p.on_complete ? `<span style="font-size:0.65rem;padding:1px 5px;background:rgba(34,197,94,0.1);color:#22c55e;border-radius:3px;" title="완료 시 트리거">→ chain</span>` : '';
+    const chainLabel = p.on_complete ? `<span style="font-size:0.65rem;padding:1px 5px;background:rgba(34,197,94,0.1);color:#22c55e;border-radius:3px;" title="${t('pipe_chain_badge')}">→ chain</span>` : '';
 
     // 연결된 스킬 표시
     let skillBadges = '';
@@ -150,8 +150,8 @@ function renderPipelines() {
       skillBadges = names.map(n => `<span style="font-size:0.6rem;padding:1px 5px;background:var(--accent-glow);color:var(--accent);border-radius:3px;">⚡ ${escapeHtml(n)}</span>`).join(' ');
     }
 
-    const runningBadge = isRunning ? `<span class="pipe-running-badge"><span class="pipe-running-dot"></span>실행 중</span>` : '';
-    const runCount = p.run_count ? `<span style="font-size:0.65rem;color:var(--text-muted);">${p.run_count}회</span>` : '';
+    const runningBadge = isRunning ? `<span class="pipe-running-badge"><span class="pipe-running-dot"></span>${t('pipe_running')}</span>` : '';
+    const runCount = p.run_count ? `<span style="font-size:0.65rem;color:var(--text-muted);">${t('pipe_runs_count').replace('{n}',p.run_count)}</span>` : '';
 
     const toggleBtn = isOn
       ? `<button class="btn btn-sm" onclick="stopPipeline('${p.id}')">OFF</button>`
@@ -171,9 +171,9 @@ function renderPipelines() {
       </div>
       <div class="pipeline-card-actions" style="margin-top:8px;display:flex;gap:6px;">
         ${toggleBtn}
-        <button class="btn btn-sm" onclick="editPipeline('${p.id}')">수정</button>
-        ${p.run_count ? `<button class="btn btn-sm" onclick="showPipelineHistory('${p.id}')">이력</button>` : ''}
-        <button class="btn btn-sm btn-danger" onclick="deletePipeline('${p.id}')">삭제</button>
+        <button class="btn btn-sm" onclick="editPipeline('${p.id}')">${t('edit_label')}</button>
+        ${p.run_count ? `<button class="btn btn-sm" onclick="showPipelineHistory('${p.id}')">${t('pipe_history')}</button>` : ''}
+        <button class="btn btn-sm btn-danger" onclick="deletePipeline('${p.id}')">${t('delete_label')}</button>
       </div>
     </div>`;
   }).join('');
@@ -190,7 +190,7 @@ async function runPipeline(pipeId) {
     fetchJobs();
     setTimeout(fetchJobs, 1000);
   } catch (err) {
-    showToast(err.message || '실행 실패', 'error');
+    showToast(err.message || t('pipe_run_fail'), 'error');
   }
 }
 
@@ -199,10 +199,10 @@ async function stopPipeline(pipeId) {
     await apiFetch(`/api/pipelines/${encodeURIComponent(pipeId)}/stop`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
     });
-    showToast('자동화 OFF');
+    showToast(t('pipe_turned_off'));
     fetchPipelines();
   } catch (err) {
-    showToast(err.message || 'OFF 실패', 'error');
+    showToast(err.message || t('pipe_off_fail'), 'error');
   }
 }
 
@@ -223,7 +223,7 @@ async function editPipeline(pipeId) {
       <div class="settings-header">
         <div class="settings-title" style="display:flex;align-items:center;gap:8px;">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          <span>자동화 수정</span>
+          <span>${t('pipe_edit_title')}</span>
           ${statusBadge}
         </div>
         <button class="settings-close" onclick="this.closest('.settings-overlay').remove()">
@@ -232,22 +232,22 @@ async function editPipeline(pipeId) {
       </div>
       <div class="settings-body">
         <div style="margin-bottom:12px;">
-          <label style="font-size:0.72rem;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">이름</label>
+          <label style="font-size:0.72rem;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">${t('name_label')}</label>
           <input id="${editId}_name" type="text" value="${escapeHtml(data.name || '')}"
             style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-secondary);color:var(--text-primary);font-size:0.8rem;box-sizing:border-box;">
         </div>
         <div style="margin-bottom:12px;">
-          <label style="font-size:0.72rem;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">명령어 (프롬프트)</label>
+          <label style="font-size:0.72rem;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">${t('pipe_label_command')}</label>
           <textarea id="${editId}_cmd" rows="3"
             style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-secondary);color:var(--text-primary);font-size:0.8rem;font-family:var(--font-mono,monospace);resize:vertical;box-sizing:border-box;">${escapeHtml(data.command || '')}</textarea>
         </div>
         <div style="margin-bottom:12px;">
-          <label style="font-size:0.72rem;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">반복 간격 <span style="font-weight:400;color:var(--text-muted);">(예: 30s, 5m, 1h / 비우면 1회)</span></label>
-          <input id="${editId}_interval" type="text" value="${escapeHtml(data.interval || '')}" placeholder="예: 1m"
+          <label style="font-size:0.72rem;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">${t('pipe_label_interval')} <span style="font-weight:400;color:var(--text-muted);">${t('pipe_interval_hint')}</span></label>
+          <input id="${editId}_interval" type="text" value="${escapeHtml(data.interval || '')}" placeholder="${t('pipe_interval_ph')}"
             style="width:120px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-secondary);color:var(--text-primary);font-size:0.8rem;">
         </div>
         <div style="margin-bottom:12px;">
-          <label style="font-size:0.72rem;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">스킬 연결</label>
+          <label style="font-size:0.72rem;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">${t('pipe_label_skills')}</label>
           <div id="${editId}_skills" style="display:flex;flex-wrap:wrap;gap:4px;font-size:0.7rem;">
             ${(typeof _skillCategories !== 'undefined' ? _skillCategories : []).flatMap(cat => (cat.skills || []).map(sk => {
               const checked = (data.skill_ids || []).includes(sk.id);
@@ -259,21 +259,21 @@ async function editPipeline(pipeId) {
           </div>
         </div>
         <div style="font-size:0.7rem;color:var(--text-muted);display:flex;gap:12px;">
-          <span>경로: <code>${escapeHtml(data.project_path)}</code></span>
-          ${data.run_count ? `<span>${data.run_count}회 실행</span>` : ''}
+          <span>${t('pipe_label_path')}: <code>${escapeHtml(data.project_path)}</code></span>
+          ${data.run_count ? `<span>${t('pipe_runs_count').replace('{n}',data.run_count)}</span>` : ''}
         </div>
       </div>
       <div class="settings-footer" style="display:flex;gap:6px;">
-        <button class="btn btn-sm btn-primary" onclick="_savePipelineEdit('${data.id}','${editId}',this)">저장</button>
+        <button class="btn btn-sm btn-primary" onclick="_savePipelineEdit('${data.id}','${editId}',this)">${t('save')}</button>
         ${isOn
           ? `<button class="btn btn-sm" onclick="stopPipeline('${data.id}');this.closest('.settings-overlay').remove();">OFF</button>`
           : `<button class="btn btn-sm" onclick="runPipeline('${data.id}');this.closest('.settings-overlay').remove();">ON</button>`}
-        <button class="btn btn-sm" onclick="this.closest('.settings-overlay').remove()">닫기</button>
+        <button class="btn btn-sm" onclick="this.closest('.settings-overlay').remove()">${t('close')}</button>
       </div>
     </div>`;
     document.body.appendChild(overlay);
   } catch (err) {
-    showToast(err.message || '조회 실패', 'error');
+    showToast(err.message || t('pipe_query_fail'), 'error');
   }
 }
 
@@ -281,40 +281,40 @@ async function _savePipelineEdit(pipeId, editId, btn) {
   const name = document.getElementById(editId + '_name').value.trim();
   const command = document.getElementById(editId + '_cmd').value.trim();
   const interval = document.getElementById(editId + '_interval').value.trim();
-  if (!command) { showToast('명령어를 입력하세요', 'error'); return; }
+  if (!command) { showToast(t('pipe_cmd_required'), 'error'); return; }
 
   // 체크된 스킬 수집
   const skillChecks = document.querySelectorAll(`#${editId}_skills input[type="checkbox"]:checked`);
   const skill_ids = [...skillChecks].map(cb => cb.value);
 
   btn.disabled = true;
-  btn.textContent = '저장 중...';
+  btn.textContent = t('saving_text');
   try {
     await apiFetch(`/api/pipelines/${encodeURIComponent(pipeId)}/update`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, command, interval, skill_ids }),
     });
-    showToast('자동화 수정 완료');
+    showToast(t('pipe_saved'));
     btn.closest('.settings-overlay').remove();
     fetchPipelines();
   } catch (err) {
-    showToast(err.message || '수정 실패', 'error');
+    showToast(err.message || t('pipe_save_fail'), 'error');
     btn.disabled = false;
-    btn.textContent = '저장';
+    btn.textContent = t('save');
   }
 }
 
 async function deletePipeline(pipeId) {
-  if (!confirm('이 자동화를 삭제하시겠습니까?')) return;
+  if (!confirm(t('pipe_confirm_del'))) return;
   try {
     await apiFetch(`/api/pipelines/${encodeURIComponent(pipeId)}`, { method: 'DELETE' });
     // 즉시 로컬 상태 반영 → UI 지연 없음
     _pipelines = _pipelines.filter(p => p.id !== pipeId);
     renderPipelines();
-    showToast('자동화 삭제됨');
+    showToast(t('pipe_deleted'));
     fetchPipelines();
   } catch (err) {
-    showToast(err.message || '삭제 실패', 'error');
+    showToast(err.message || t('preset_delete_failed'), 'error');
   }
 }
 
@@ -327,9 +327,9 @@ async function fetchEvolutionSummary() {
     const cls = data.classifications || {};
     const total = (cls.has_change || 0) + (cls.no_change || 0) + (cls.unknown || 0);
     el.innerHTML = `<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:8px 12px;background:var(--bg-secondary);border-radius:8px;font-size:0.7rem;color:var(--text-muted);">
-      <span>총 ${data.total_runs}회 실행</span>
-      <span>효율 ${data.efficiency_pct}%</span>
-      ${total > 0 ? `<span style="color:var(--text-secondary);">변경:${cls.has_change||0} / 무변경:${cls.no_change||0}</span>` : ''}
+      <span>${t('pipe_total_runs').replace('{n}',data.total_runs)}</span>
+      <span>${t('pipe_evo_efficiency').replace('{n}',data.efficiency_pct)}</span>
+      ${total > 0 ? `<span style="color:var(--text-secondary);">${t('pipe_hist_change')}:${cls.has_change||0} / ${t('pipe_hist_nochange')}:${cls.no_change||0}</span>` : ''}
     </div>`;
   } catch { el.innerHTML = ''; }
 }
@@ -346,7 +346,7 @@ function openCreatePipeline() {
     <div class="settings-header">
       <div class="settings-title" style="display:flex;align-items:center;gap:8px;">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        <span>새 자동화</span>
+        <span>${t('pipe_new_title')}</span>
       </div>
       <button class="settings-close" onclick="this.closest('.settings-overlay').remove()">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -354,39 +354,39 @@ function openCreatePipeline() {
     </div>
     <div class="settings-body">
       <div style="margin-bottom:12px;">
-        <label style="font-size:0.72rem;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">이름</label>
-        <input id="${formId}_name" type="text" placeholder="예: code-quality"
+        <label style="font-size:0.72rem;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">${t('name_label')}</label>
+        <input id="${formId}_name" type="text" placeholder="e.g. code-quality"
           style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-secondary);color:var(--text-primary);font-size:0.8rem;box-sizing:border-box;">
       </div>
       <div style="margin-bottom:12px;">
-        <label style="font-size:0.72rem;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">프로젝트 경로</label>
+        <label style="font-size:0.72rem;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">${t('pipe_label_path')}</label>
         <input id="${formId}_path" type="text" value="${escapeHtml(cwd)}"
           style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-secondary);color:var(--text-primary);font-size:0.8rem;font-family:var(--font-mono,monospace);box-sizing:border-box;">
       </div>
       <div style="margin-bottom:12px;">
-        <label style="font-size:0.72rem;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">명령어 (프롬프트)</label>
-        <textarea id="${formId}_cmd" rows="4" placeholder="Claude에게 시킬 작업을 입력하세요"
+        <label style="font-size:0.72rem;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">${t('pipe_label_command')}</label>
+        <textarea id="${formId}_cmd" rows="4" placeholder="${t('pipe_cmd_ph')}"
           style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-secondary);color:var(--text-primary);font-size:0.8rem;font-family:var(--font-mono,monospace);resize:vertical;box-sizing:border-box;"></textarea>
       </div>
       <div style="display:flex;gap:12px;margin-bottom:12px;">
         <div style="flex:1;">
-          <label style="font-size:0.72rem;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">반복 간격 <span style="font-weight:400;color:var(--text-muted);">(비우면 1회)</span></label>
-          <input id="${formId}_interval" type="text" placeholder="예: 5m, 1h"
+          <label style="font-size:0.72rem;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">${t('pipe_label_interval')} <span style="font-weight:400;color:var(--text-muted);">${t('pipe_interval_once')}</span></label>
+          <input id="${formId}_interval" type="text" placeholder="${t('pipe_interval_ph')}"
             style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-secondary);color:var(--text-primary);font-size:0.8rem;box-sizing:border-box;">
         </div>
         <div style="flex:1;">
-          <label style="font-size:0.72rem;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">체이닝 <span style="font-weight:400;color:var(--text-muted);">(완료 시 트리거)</span></label>
+          <label style="font-size:0.72rem;font-weight:600;color:var(--text-secondary);display:block;margin-bottom:4px;">${t('pipe_label_chain')} <span style="font-weight:400;color:var(--text-muted);">${t('pipe_chain_hint')}</span></label>
           <select id="${formId}_chain"
             style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-secondary);color:var(--text-primary);font-size:0.8rem;box-sizing:border-box;">
-            <option value="">없음</option>
+            <option value="">${t('none_label')}</option>
             ${_pipelines.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name || p.id)}</option>`).join('')}
           </select>
         </div>
       </div>
     </div>
     <div class="settings-footer" style="display:flex;gap:6px;">
-      <button class="btn btn-sm btn-primary" onclick="_submitCreatePipeline('${formId}',this)">생성 및 실행</button>
-      <button class="btn btn-sm" onclick="this.closest('.settings-overlay').remove()">취소</button>
+      <button class="btn btn-sm btn-primary" onclick="_submitCreatePipeline('${formId}',this)">${t('pipe_create_run')}</button>
+      <button class="btn btn-sm" onclick="this.closest('.settings-overlay').remove()">${t('cancel')}</button>
     </div>
   </div>`;
   document.body.appendChild(overlay);
@@ -401,25 +401,25 @@ async function _submitCreatePipeline(formId, btn) {
   const interval = document.getElementById(formId + '_interval').value.trim();
   const on_complete = document.getElementById(formId + '_chain').value;
 
-  if (!project_path) { showToast('프로젝트 경로를 입력하세요', 'error'); return; }
-  if (!command) { showToast('명령어를 입력하세요', 'error'); return; }
+  if (!project_path) { showToast(t('pipe_path_required'), 'error'); return; }
+  if (!command) { showToast(t('pipe_cmd_required'), 'error'); return; }
 
   btn.disabled = true;
-  btn.textContent = '생성 중...';
+  btn.textContent = t('creating_text');
   try {
     await apiFetch('/api/pipelines', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, project_path, command, interval, on_complete }),
     });
-    showToast('자동화 생성 완료');
+    showToast(t('pipe_created'));
     btn.closest('.settings-overlay').remove();
     fetchPipelines();
     fetchJobs();
   } catch (err) {
-    showToast(err.message || '생성 실패', 'error');
+    showToast(err.message || t('pipe_create_fail'), 'error');
     btn.disabled = false;
-    btn.textContent = '생성 및 실행';
+    btn.textContent = t('pipe_create_run');
   }
 }
 
@@ -435,14 +435,14 @@ async function showPipelineHistory(pipeId) {
     const entries = data.entries || [];
     let tableHtml = '';
     if (entries.length === 0) {
-      tableHtml = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:0.8rem;">실행 이력이 없습니다.</div>';
+      tableHtml = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:0.8rem;">' + t('pipe_hist_empty') + '</div>';
     } else {
       const rows = entries.map((h, i) => {
         const cls = h.classification || 'unknown';
         const clsBadge = cls === 'has_change'
-          ? '<span class="pipe-hist-badge pipe-hist-change">변경</span>'
+          ? '<span class="pipe-hist-badge pipe-hist-change">' + t('pipe_hist_change') + '</span>'
           : cls === 'no_change'
-            ? '<span class="pipe-hist-badge pipe-hist-nochange">무변경</span>'
+            ? '<span class="pipe-hist-badge pipe-hist-nochange">' + t('pipe_hist_nochange') + '</span>'
             : '<span class="pipe-hist-badge pipe-hist-unknown">?</span>';
         const dur = h.duration_ms ? `${(h.duration_ms / 1000).toFixed(1)}s` : '-';
         const time = h.completed_at || '';
@@ -455,20 +455,20 @@ async function showPipelineHistory(pipeId) {
         </tr>`;
       }).join('');
       tableHtml = `<div class="pipe-hist-table-wrap"><table class="pipe-hist-table">
-        <thead><tr><th>시간</th><th>분류</th><th>소요</th><th>결과 요약</th></tr></thead>
+        <thead><tr><th>${t('pipe_hist_time')}</th><th>${t('pipe_hist_class')}</th><th>${t('pipe_hist_dur')}</th><th>${t('pipe_hist_result')}</th></tr></thead>
         <tbody>${rows}</tbody>
       </table></div>`;
     }
 
     const summaryHtml = `<div style="display:flex;gap:12px;font-size:0.72rem;color:var(--text-muted);margin-bottom:12px;">
-      <span>총 ${data.run_count}회 실행</span>
+      <span>${t('pipe_total_runs').replace('{n}',data.run_count)}</span>
     </div>`;
 
     overlay.innerHTML = `<div class="settings-panel" style="max-width:700px;margin:0;">
       <div class="settings-header">
         <div class="settings-title" style="display:flex;align-items:center;gap:8px;">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-          <span>${escapeHtml(data.name || pipeId)} — 실행 이력</span>
+          <span>${escapeHtml(data.name || pipeId)} — ${t('pipe_hist_title')}</span>
         </div>
         <button class="settings-close" onclick="this.closest('.settings-overlay').remove()">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -479,12 +479,12 @@ async function showPipelineHistory(pipeId) {
         ${tableHtml}
       </div>
       <div class="settings-footer">
-        <button class="btn btn-sm" onclick="this.closest('.settings-overlay').remove()">닫기</button>
+        <button class="btn btn-sm" onclick="this.closest('.settings-overlay').remove()">${t('close')}</button>
       </div>
     </div>`;
     document.body.appendChild(overlay);
   } catch (err) {
-    showToast(err.message || '이력 조회 실패', 'error');
+    showToast(err.message || t('pipe_hist_fail'), 'error');
   }
 }
 

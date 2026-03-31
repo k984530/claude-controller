@@ -11,20 +11,21 @@ CRUD/유틸리티: pipeline_crud.py
 """
 
 import fcntl
-import json
 import time
 
-from config import DATA_DIR, SKILLS_FILE
+from config import DATA_DIR
 from jobs import send_to_fifo, get_job_result
+from utils import find_skills_by_ids
 from pipeline_classify import classify_result
 from pipeline_context import get_git_snapshot, should_skip_dispatch, build_enriched_prompt
 from pipeline_crud import (
     # 재수출: handler_crud.py 등 외부에서 pipeline 모듈을 통해 접근
     list_pipelines, get_pipeline, create_pipeline, delete_pipeline,  # noqa: F401
-    modify_pipeline as update_pipeline,  # noqa: F401
+    modify_pipeline,  # noqa: F401 — 외부 API용 파이프라인 수정
     get_pipeline_status, get_pipeline_history, get_evolution_summary,  # noqa: F401
     # 내부 사용
-    pipeline_lock, load_pipelines, save_pipelines, update_pipeline as _update_pipeline,
+    pipeline_lock, load_pipelines, save_pipelines,
+    update_pipeline as _update_pipeline,  # 내부 lock+updater 패턴
     resolve_job as _resolve_job, next_run_str as _next_run_str,
     parse_timestamp as _parse_timestamp, MAX_HISTORY as _MAX_HISTORY,
 )
@@ -39,17 +40,8 @@ _AUTO_PAUSE_THRESHOLD = 5
 
 def _resolve_skill_prompts(skill_ids: list) -> str:
     """skill_ids에 해당하는 스킬 프롬프트를 [이름] 프롬프트 형태로 합친다."""
-    if not skill_ids:
-        return ""
-    try:
-        data = json.loads(SKILLS_FILE.read_text("utf-8"))
-    except (json.JSONDecodeError, OSError, FileNotFoundError):
-        return ""
-    parts = []
-    for cat in data:
-        for skill in cat.get("skills", []):
-            if skill.get("id") in skill_ids and skill.get("prompt"):
-                parts.append(f"[{skill['name']}] {skill['prompt']}")
+    skills = find_skills_by_ids(skill_ids)
+    parts = [f"[{s['name']}] {s['prompt']}" for s in skills if s.get("prompt")]
     return "\n\n".join(parts)
 
 
@@ -262,7 +254,7 @@ def stop_pipeline(pipe_id: str) -> tuple[dict | None, str | None]:
     return _update_pipeline(pipe_id, stop)
 
 
-def reset_phase(pipe_id: str, phase: str = None) -> tuple[dict | None, str | None]:
+def reset_phase(pipe_id: str, **_kwargs) -> tuple[dict | None, str | None]:
     """상태 초기화 후 즉시 실행."""
     return run_next(pipe_id)
 
@@ -277,7 +269,6 @@ _TICK_ALL_DEBOUNCE_SEC = 3
 
 def tick_all() -> list[dict]:
     """모든 active 파이프라인을 tick한다. debounce 적용."""
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
     try:
         fd = open(_TICK_ALL_LOCK, "a+")
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)

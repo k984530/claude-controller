@@ -16,6 +16,7 @@ Controller Service — HTTP REST API 핸들러
   - handler_sessions.py → SessionHandlerMixin
   - handler_fs.py       → FsHandlerMixin
   - handler_crud.py     → ProjectHandlerMixin, PipelineHandlerMixin
+  - handler_misc.py     → MiscHandlerMixin (auth, stats, status, health, audit, webhook, cleanup)
 """
 
 import http.server
@@ -28,7 +29,6 @@ import time
 from urllib.parse import urlparse, parse_qs
 
 from config import UPLOADS_DIR
-from auth import verify_token
 import jobs
 import checkpoint
 import projects as _projects_mod
@@ -37,6 +37,7 @@ import webhook as _webhook_mod
 import audit as _audit_mod
 import suggestions as _suggestions_mod
 import presets as _presets_mod
+import goals as _goals_mod
 
 from handler_base import ResponseMixin, SecurityMixin, StaticServeMixin
 from handler_jobs import JobHandlerMixin
@@ -46,6 +47,54 @@ from handler_crud import ProjectHandlerMixin, PipelineHandlerMixin
 from handler_suggestions import SuggestionHandlerMixin
 from handler_presets import PresetHandlerMixin
 from handler_goals import GoalHandlerMixin
+from handler_misc import MiscHandlerMixin
+
+# ── 정적 라우팅 테이블 (OCP: 라우트 추가 시 테이블에 행만 추가) ──
+
+_GET_STATIC_ROUTES = {
+    "/api/health": "_handle_health",
+    "/api/auth/verify": "_handle_auth_verify",
+    "/api/status": "_handle_status",
+    "/api/config": "_handle_get_config",
+    "/api/skills": "_handle_get_skills",
+    "/api/recent-dirs": "_handle_get_recent_dirs",
+    "/api/projects": "_handle_list_projects",
+    "/api/presets": "_handle_list_presets",
+    "/api/pipelines": "_handle_list_pipelines",
+}
+
+_GET_PARSED_ROUTES = {
+    "/api/audit": "_handle_audit",
+    "/api/stats": "_handle_stats",
+    "/api/results": "_handle_results",
+    "/api/suggestions": "_handle_list_suggestions",
+    "/api/goals": "_handle_list_goals",
+}
+
+_POST_STATIC_ROUTES = {
+    "/api/auth/verify": "_handle_auth_verify",
+    "/api/send": "_handle_send",
+    "/api/upload": "_handle_upload",
+    "/api/service/start": "_handle_service_start",
+    "/api/service/stop": "_handle_service_stop",
+    "/api/config": "_handle_save_config",
+    "/api/skills": "_handle_save_skills",
+    "/api/recent-dirs": "_handle_save_recent_dirs",
+    "/api/mkdir": "_handle_mkdir",
+    "/api/projects": "_handle_add_project",
+    "/api/projects/create": "_handle_create_project",
+    "/api/suggestions/generate": "_handle_generate_suggestions",
+    "/api/suggestions/clear": "_handle_clear_dismissed",
+    "/api/presets": "_handle_create_preset",
+    "/api/goals": "_handle_create_goal",
+    "/api/pipelines": "_handle_create_pipeline",
+    "/api/webhooks/test": "_handle_webhook_test",
+    "/api/logs/cleanup": "_handle_logs_cleanup",
+}
+
+_DELETE_STATIC_ROUTES = {
+    "/api/jobs": "_handle_delete_completed_jobs",
+}
 
 # ── 사전 컴파일된 파라미터 라우팅 테이블 ──
 _GET_PARAM_ROUTES = [
@@ -86,15 +135,15 @@ _DELETE_PARAM_ROUTES = [
 ]
 
 # 핫 리로드 대상 모듈
-_HOT_MODULES = [jobs, checkpoint, _projects_mod, _pipeline_mod, _webhook_mod, _audit_mod, _suggestions_mod, _presets_mod]
+_HOT_MODULES = [jobs, checkpoint, _projects_mod, _pipeline_mod, _webhook_mod, _audit_mod, _suggestions_mod, _presets_mod, _goals_mod]
 
 
 def _hot_reload():
     for mod in _HOT_MODULES:
         try:
             importlib.reload(mod)
-        except Exception:
-            pass
+        except Exception as e:
+            sys.stderr.write(f"  [HOT_RELOAD] {mod.__name__} 리로드 실패: {e}\n")
 
 
 class ControllerHandler(
@@ -106,6 +155,7 @@ class ControllerHandler(
     SuggestionHandlerMixin,
     PresetHandlerMixin,
     GoalHandlerMixin,
+    MiscHandlerMixin,
     ResponseMixin,
     SecurityMixin,
     StaticServeMixin,
@@ -146,31 +196,46 @@ class ControllerHandler(
         self._set_cors_headers()
         self.end_headers()
 
-    def do_GET(self):
-        self._req_start = time.time()
-        try:
-            self._do_get_inner()
-        finally:
-            self._audit_log()
-
-    def _do_get_inner(self):
+    def _prepare_request(self):
+        """공통 요청 전처리: 핫리로드, URL 파싱, 보안 검증. 실패 시 (None, None) 반환."""
         _hot_reload()
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
-
         if not self._check_host():
-            return
+            return None, None
         if not self._check_auth(path):
-            return
+            return None, None
+        return path, parsed
 
+    def _execute_request(self, dispatcher):
+        """공통 요청 실행: 전처리 → 디스패치 → 에러 처리."""
+        self._req_start = time.time()
         try:
-            self._dispatch_get(path, parsed)
-        except (ValueError, TypeError) as e:
-            msg = str(e) or "잘못된 요청 파라미터입니다"
-            self._error_response(msg, 400, code="INVALID_PARAM")
-        except Exception as e:
-            sys.stderr.write(f"  [ERROR] GET {path}: {e}\n")
-            self._error_response("서버 내부 오류가 발생했습니다", 500, code="INTERNAL_ERROR")
+            path, parsed = self._prepare_request()
+            if path is None:
+                return
+            try:
+                dispatcher(path, parsed)
+            except json.JSONDecodeError:
+                self._error_response("잘못된 JSON 요청 본문입니다", 400, code="INVALID_JSON")
+            except (ValueError, TypeError) as e:
+                msg = str(e) or "잘못된 요청입니다"
+                status = 413 if "최대 크기" in msg else 400
+                self._error_response(msg, status, code="INVALID_BODY")
+            except Exception as e:
+                sys.stderr.write(f"  [ERROR] {self.command} {path}: {e}\n")
+                self._error_response("서버 내부 오류가 발생했습니다", 500, code="INTERNAL_ERROR")
+        finally:
+            self._audit_log()
+
+    def do_GET(self):
+        self._execute_request(self._dispatch_get)
+
+    def do_POST(self):
+        self._execute_request(self._dispatch_post)
+
+    def do_DELETE(self):
+        self._execute_request(self._dispatch_delete)
 
     def _dispatch_param_routes(self, path, routes):
         for pattern, method_name in routes:
@@ -181,54 +246,34 @@ class ControllerHandler(
         return False
 
     def _dispatch_get(self, path, parsed):
-        if path == "/api/health":
-            return self._handle_health()
-        if path == "/api/audit":
-            return self._handle_audit(parsed)
-        if path == "/api/auth/verify":
-            return self._handle_auth_verify()
-        if path == "/api/status":
-            return self._handle_status()
-        if path == "/api/stats":
-            return self._handle_stats(parsed)
-        if path == "/api/results":
-            return self._handle_results(parsed)
+        # 정적 라우트 — 인자 없음
+        method = _GET_STATIC_ROUTES.get(path)
+        if method:
+            return getattr(self, method)()
+
+        # 정적 라우트 — parsed 전달
+        method = _GET_PARSED_ROUTES.get(path)
+        if method:
+            return getattr(self, method)(parsed)
+
+        # 쿼리 파라미터 추출이 필요한 라우트
+        qs = parse_qs(parsed.query)
         if path == "/api/jobs":
-            qs = parse_qs(parsed.query)
             return self._handle_jobs(
                 cwd_filter=qs.get("cwd", [None])[0],
                 page=self._safe_int(qs.get("page", [1])[0], 1),
                 limit=self._safe_int(qs.get("limit", [10])[0], 10),
             )
         if path == "/api/sessions":
-            qs = parse_qs(parsed.query)
             return self._handle_sessions(filter_cwd=qs.get("cwd", [None])[0])
-        if path == "/api/config":
-            return self._handle_get_config()
-        if path == "/api/skills":
-            return self._handle_get_skills()
-        if path == "/api/recent-dirs":
-            return self._handle_get_recent_dirs()
         if path == "/api/dirs":
-            qs = parse_qs(parsed.query)
             return self._handle_dirs(qs.get("path", [os.path.expanduser("~")])[0])
         if path == "/api/find-dir":
-            qs = parse_qs(parsed.query)
-            name = qs.get("name", [""])[0].strip()
-            return self._handle_find_dir(name)
-        if path == "/api/projects":
-            return self._handle_list_projects()
-        if path == "/api/suggestions":
-            return self._handle_list_suggestions(parsed)
-        if path == "/api/presets":
-            return self._handle_list_presets()
-        if path == "/api/goals":
-            return self._handle_list_goals(parsed)
-        if path == "/api/pipelines":
-            return self._handle_list_pipelines()
+            return self._handle_find_dir(qs.get("name", [""])[0].strip())
         if path == "/api/pipelines/evolution":
             return self._json_response(self._pipeline().get_evolution_summary())
 
+        # 파라미터 라우트 (정규식 매칭)
         if self._dispatch_param_routes(path, _GET_PARAM_ROUTES):
             return
 
@@ -237,210 +282,32 @@ class ControllerHandler(
 
         self._serve_static(parsed.path)
 
-    def do_POST(self):
-        self._req_start = time.time()
-        try:
-            self._do_post_inner()
-        finally:
-            self._audit_log()
-
-    def _do_post_inner(self):
-        _hot_reload()
-        parsed = urlparse(self.path)
-        path = parsed.path.rstrip("/") or "/"
-
-        if not self._check_host():
-            return
-        if not self._check_auth(path):
-            return
-
-        try:
-            self._dispatch_post(path, parsed)
-        except json.JSONDecodeError:
-            self._error_response("잘못된 JSON 요청 본문입니다", 400, code="INVALID_JSON")
-        except ValueError as e:
-            msg = str(e) or "잘못된 요청 본문입니다"
-            status = 413 if "최대 크기" in msg else 400
-            self._error_response(msg, status, code="INVALID_BODY")
-        except Exception as e:
-            sys.stderr.write(f"  [ERROR] POST {path}: {e}\n")
-            self._error_response("서버 내부 오류가 발생했습니다", 500, code="INTERNAL_ERROR")
-
     def _dispatch_post(self, path, parsed):
-        if path == "/api/auth/verify":
-            return self._handle_auth_verify()
-        if path == "/api/send":
-            return self._handle_send()
-        if path == "/api/upload":
-            return self._handle_upload()
-        if path == "/api/service/start":
-            return self._handle_service_start()
-        if path == "/api/service/stop":
-            return self._handle_service_stop()
-        if path == "/api/config":
-            return self._handle_save_config()
-        if path == "/api/skills":
-            return self._handle_save_skills()
-        if path == "/api/recent-dirs":
-            return self._handle_save_recent_dirs()
-        if path == "/api/mkdir":
-            return self._handle_mkdir()
-        if path == "/api/projects":
-            return self._handle_add_project()
-        if path == "/api/projects/create":
-            return self._handle_create_project()
-        if path == "/api/suggestions/generate":
-            return self._handle_generate_suggestions()
-        if path == "/api/suggestions/clear":
-            return self._handle_clear_dismissed()
-        if path == "/api/presets":
-            return self._handle_create_preset()
-        if path == "/api/goals":
-            return self._handle_create_goal()
-        if path == "/api/pipelines":
-            return self._handle_create_pipeline()
+        # 정적 라우트 — 인자 없음
+        method = _POST_STATIC_ROUTES.get(path)
+        if method:
+            return getattr(self, method)()
+
+        # 특수 라우트
         if path == "/api/pipelines/tick-all":
             return self._json_response(self._pipeline().tick_all())
-        if path == "/api/webhooks/test":
-            return self._handle_webhook_test()
-        if path == "/api/logs/cleanup":
-            return self._handle_logs_cleanup()
 
+        # 파라미터 라우트 (정규식 매칭)
         if self._dispatch_param_routes(path, _POST_PARAM_ROUTES):
             return
 
         self._error_response("알 수 없는 엔드포인트", 404, code="ENDPOINT_NOT_FOUND")
 
-    def do_DELETE(self):
-        self._req_start = time.time()
-        try:
-            self._do_delete_inner()
-        finally:
-            self._audit_log()
+    def _dispatch_delete(self, path, _parsed=None):
+        # 정적 라우트 — 인자 없음
+        method = _DELETE_STATIC_ROUTES.get(path)
+        if method:
+            return getattr(self, method)()
 
-    def _do_delete_inner(self):
-        _hot_reload()
-        parsed = urlparse(self.path)
-        path = parsed.path.rstrip("/") or "/"
-
-        if not self._check_host():
-            return
-        if not self._check_auth(path):
-            return
-
-        try:
-            self._dispatch_delete(path)
-        except (json.JSONDecodeError, ValueError, TypeError) as e:
-            msg = str(e) or "잘못된 요청입니다"
-            self._error_response(msg, 400, code="INVALID_REQUEST")
-        except Exception as e:
-            sys.stderr.write(f"  [ERROR] DELETE {path}: {e}\n")
-            self._error_response("서버 내부 오류가 발생했습니다", 500, code="INTERNAL_ERROR")
-
-    def _dispatch_delete(self, path):
-        if path == "/api/jobs":
-            return self._handle_delete_completed_jobs()
-
+        # 파라미터 라우트 (정규식 매칭)
         if self._dispatch_param_routes(path, _DELETE_PARAM_ROUTES):
             return
 
         self._error_response("알 수 없는 엔드포인트", 404, code="ENDPOINT_NOT_FOUND")
 
-    # ════════════════════════════════════════════════
-    #  얇은 핸들러 (라우팅과 함께 유지)
-    # ════════════════════════════════════════════════
-
-    def _handle_auth_verify(self):
-        auth_header = self.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:]
-            if verify_token(token):
-                return self._json_response({"valid": True})
-        self._json_response({"valid": False}, 401)
-
-    def _handle_stats(self, parsed):
-        qs = parse_qs(parsed.query)
-        period = qs.get("period", ["all"])[0]
-        now = time.time()
-
-        period_map = {"day": 86400, "week": 604800, "month": 2592000}
-        if period in period_map:
-            from_ts = now - period_map[period]
-        elif period == "all":
-            from_ts = None
-        else:
-            from_ts = self._parse_ts(qs.get("from", [None])[0])
-
-        to_ts = self._parse_ts(qs.get("to", [None])[0]) or now
-        self._json_response(self._jobs_mod().get_stats(from_ts=from_ts, to_ts=to_ts))
-
-    @staticmethod
-    def _parse_ts(value):
-        if not value:
-            return None
-        try:
-            return float(value)
-        except ValueError:
-            pass
-        for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S"):
-            try:
-                return time.mktime(time.strptime(value, fmt))
-            except ValueError:
-                continue
-        return None
-
-    def _handle_status(self):
-        from utils import is_service_running
-        from config import FIFO_PATH, CONTROLLER_DIR
-        running, _ = is_service_running()
-        self._json_response({
-            "running": running,
-            "fifo": str(FIFO_PATH),
-            "controller_dir": str(CONTROLLER_DIR),
-        })
-
-    def _handle_health(self):
-        import config as _cfg
-        from health import collect_health
-        payload, http_status = collect_health(_cfg)
-        self._json_response(payload, http_status)
-
-    def _handle_audit(self, parsed):
-        qs = parse_qs(parsed.query)
-        result = _audit_mod.search_audit(
-            from_ts=self._parse_ts(qs.get("from", [None])[0]),
-            to_ts=self._parse_ts(qs.get("to", [None])[0]),
-            method=qs.get("method", [None])[0],
-            path_contains=qs.get("path", [None])[0],
-            ip=qs.get("ip", [None])[0],
-            status=qs.get("status", [None])[0],
-            limit=min(self._safe_int(qs.get("limit", [100])[0], 100), 1000),
-            offset=self._safe_int(qs.get("offset", [0])[0], 0),
-        )
-        self._json_response(result)
-
-    def _handle_webhook_test(self):
-        result = _webhook_mod.deliver_webhook("test-0000", "done")
-        if result is None:
-            return self._error_response(
-                "webhook_url이 설정되지 않았습니다. 설정에서 URL을 지정하세요.",
-                400, code="WEBHOOK_NOT_CONFIGURED")
-        marker = _webhook_mod._WEBHOOK_SENT_DIR / "test-0000_done"
-        if marker.exists():
-            try:
-                marker.unlink()
-            except OSError:
-                pass
-        self._json_response(result)
-
-    def _handle_logs_cleanup(self):
-        body = self._read_body() or {}
-        retention_days = body.get("retention_days", 30)
-        try:
-            retention_days = int(retention_days)
-            if retention_days < 1:
-                retention_days = 1
-        except (ValueError, TypeError):
-            retention_days = 30
-        result = self._jobs_mod().cleanup_old_jobs(retention_days=retention_days)
-        self._json_response(result)
+    # 얇은 핸들러 → handler_misc.py MiscHandlerMixin으로 분리됨

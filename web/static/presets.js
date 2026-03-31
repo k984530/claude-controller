@@ -15,12 +15,12 @@ async function fetchPresets() {
 }
 
 async function saveCurrentAsPreset() {
-  const name = prompt(t('preset_name_prompt') || '프리셋 이름을 입력하세요');
+  const name = prompt(t('preset_name_prompt'));
   if (!name || !name.trim()) return;
 
   const config = _captureFormState();
   if (!config.skill_ids.length && !config.prompt && !config.cwd) {
-    showToast(t('preset_empty_warn') || '저장할 설정이 없습니다', 'error');
+    showToast(t('preset_empty_warn'), 'error');
     return;
   }
 
@@ -29,22 +29,22 @@ async function saveCurrentAsPreset() {
       method: 'POST',
       body: JSON.stringify({ name: name.trim(), config }),
     });
-    showToast(t('preset_saved') || '프리셋이 저장되었습니다');
+    showToast(t('preset_saved'));
     await fetchPresets();
   } catch (err) {
-    showToast(`${t('preset_save_failed') || '저장 실패'}: ${err.message}`, 'error');
+    showToast(t('preset_save_failed') + ': ' + err.message, 'error');
   }
 }
 
 async function deletePreset(presetId, e) {
   if (e) e.stopPropagation();
-  if (!confirm(t('preset_delete_confirm') || '이 프리셋을 삭제하시겠습니까?')) return;
+  if (!confirm(t('preset_delete_confirm'))) return;
   try {
     await apiFetch(`/api/presets/${encodeURIComponent(presetId)}`, { method: 'DELETE' });
-    showToast(t('preset_deleted') || '프리셋이 삭제되었습니다');
+    showToast(t('preset_deleted'));
     await fetchPresets();
   } catch (err) {
-    showToast(`${t('preset_delete_failed') || '삭제 실패'}: ${err.message}`, 'error');
+    showToast(t('preset_delete_failed') + ': ' + err.message, 'error');
   }
 }
 
@@ -107,7 +107,7 @@ function applyPreset(presetId) {
   }
 
   _closePresetMenu();
-  showToast(`${t('preset_loaded') || '프리셋 적용'}: ${preset.name}`);
+  showToast(t('preset_loaded') + ': ' + preset.name);
   promptInput.focus();
 }
 
@@ -124,7 +124,7 @@ function _renderPresetBar() {
   if (!listEl) return;
 
   if (_presets.length === 0) {
-    listEl.innerHTML = `<div class="preset-empty">${escapeHtml(t('preset_none') || '저장된 프리셋이 없습니다')}</div>`;
+    listEl.innerHTML = `<div class="preset-empty">${escapeHtml(t('preset_none'))}</div>`;
     return;
   }
 
@@ -135,13 +135,13 @@ function _renderPresetBar() {
       const names = (cfg.skill_names || cfg.skill_ids).slice(0, 3);
       tags.push(...names.map(n => `<span class="preset-tag preset-tag-skill">${escapeHtml(n)}</span>`));
     }
-    if (cfg.automation_mode) tags.push(`<span class="preset-tag preset-tag-auto">${escapeHtml(t('automation') || '자동화')}</span>`);
+    if (cfg.automation_mode) tags.push(`<span class="preset-tag preset-tag-auto">${escapeHtml(t('automation'))}</span>`);
     if (cfg.cwd) tags.push(`<span class="preset-tag preset-tag-cwd" title="${escapeHtml(cfg.cwd)}">${escapeHtml(cfg.cwd.split('/').pop())}</span>`);
 
     return `<div class="preset-item" onclick="applyPreset('${escapeHtml(p.id)}')">
       <div class="preset-item-header">
         <span class="preset-item-name">${escapeHtml(p.name)}</span>
-        <button class="preset-item-del" onclick="deletePreset('${escapeHtml(p.id)}', event)" title="${escapeHtml(t('delete') || '삭제')}">
+        <button class="preset-item-del" onclick="deletePreset('${escapeHtml(p.id)}', event)" title="${escapeHtml(t('delete_label'))}">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>

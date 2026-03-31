@@ -21,7 +21,7 @@ def collect_health(config) -> tuple[dict, int]:
     Returns:
         (payload dict, http_status_code)
     """
-    from utils import is_service_running
+    from utils import is_service_running, parse_meta_file, correct_running_status
 
     # ── 서비스 상태 ──
     running, pid = is_service_running()
@@ -36,25 +36,21 @@ def collect_health(config) -> tuple[dict, int]:
     fifo_exists = config.FIFO_PATH.exists()
     fifo_writable = os.access(str(config.FIFO_PATH), os.W_OK) if fifo_exists else False
 
-    # ── 작업 통계 (meta 파일 직접 스캔 — get_all_jobs()보다 가볍다) ──
+    # ── 작업 통계 (parse_meta_file + correct_running_status 사용) ──
     active, succeeded, failed, total = 0, 0, 0, 0
     if config.LOGS_DIR.exists():
         for mf in config.LOGS_DIR.glob("job_*.meta"):
+            meta = parse_meta_file(mf)
+            if not meta:
+                continue
             total += 1
-            try:
-                content = mf.read_text()
-                for line in content.splitlines():
-                    if line.startswith("STATUS="):
-                        val = line[7:].strip().strip("'\"")
-                        if val == "running":
-                            active += 1
-                        elif val == "done":
-                            succeeded += 1
-                        elif val == "failed":
-                            failed += 1
-                        break
-            except OSError:
-                pass
+            status = correct_running_status(meta)
+            if status == "running":
+                active += 1
+            elif status == "done":
+                succeeded += 1
+            elif status == "failed":
+                failed += 1
 
     # ── 디스크 사용량 ──
     logs_size_bytes = 0

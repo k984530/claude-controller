@@ -12,12 +12,14 @@ import fcntl
 import json
 import os
 import re
+import shutil
+import sys
 import time
 from contextlib import contextmanager
 
 from config import DATA_DIR, LOGS_DIR
 from jobs import get_job_result
-from utils import parse_meta_file, generate_id
+from utils import parse_meta_file, generate_id, load_json_file, atomic_json_save
 
 PIPELINES_FILE = DATA_DIR / "pipelines.json"
 
@@ -35,7 +37,6 @@ _LOCK_FILE = DATA_DIR / "pipelines.lock"
 @contextmanager
 def pipeline_lock():
     """pipelines.json에 대한 파일 수준 배타적 잠금."""
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
     fd = open(_LOCK_FILE, "w")
     try:
         fcntl.flock(fd, fcntl.LOCK_EX)
@@ -50,51 +51,35 @@ _DEPRECATED_FIELDS = {"effective_interval_sec", "adaptive_multiplier", "skip_cou
 
 
 def load_pipelines() -> list[dict]:
-    try:
-        if PIPELINES_FILE.exists():
-            pipes = json.loads(PIPELINES_FILE.read_text("utf-8"))
-            dirty = False
-            for p in pipes:
-                for field in _DEPRECATED_FIELDS:
-                    if field in p:
-                        del p[field]
-                        dirty = True
-            if dirty:
-                save_pipelines(pipes)
-            return pipes
-    except (json.JSONDecodeError, OSError):
-        pass
-    return []
+    pipes = load_json_file(PIPELINES_FILE, [])
+    dirty = False
+    for p in pipes:
+        for field in _DEPRECATED_FIELDS:
+            if field in p:
+                del p[field]
+                dirty = True
+    if dirty:
+        save_pipelines(pipes)
+    return pipes
 
 
 def save_pipelines(pipelines: list[dict]):
     """원자적 쓰기 + 파이프라인 수 감소 안전장치."""
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-
-    existing_count = 0
-    backup_path = PIPELINES_FILE.with_suffix(".bak")
+    # 수 감소 시 백업 (데이터 유실 방지)
     if PIPELINES_FILE.exists():
         try:
             existing = json.loads(PIPELINES_FILE.read_text("utf-8"))
-            existing_count = len(existing)
+            if len(existing) > 0 and len(pipelines) < len(existing):
+                shutil.copy2(PIPELINES_FILE, PIPELINES_FILE.with_suffix(".bak"))
+                print(
+                    f"[pipeline] WARNING: 파이프라인 수 감소 {len(existing)} → {len(pipelines)}, "
+                    f"백업 저장: {PIPELINES_FILE.with_suffix('.bak')}",
+                    file=sys.stderr,
+                )
         except (json.JSONDecodeError, OSError):
             pass
 
-        if existing_count > 0 and len(pipelines) < existing_count:
-            import shutil
-            import sys
-            shutil.copy2(PIPELINES_FILE, backup_path)
-            print(
-                f"[pipeline] WARNING: 파이프라인 수 감소 {existing_count} → {len(pipelines)}, "
-                f"백업 저장: {backup_path}",
-                file=sys.stderr,
-            )
-
-    tmp = PIPELINES_FILE.with_suffix(".tmp")
-    tmp.write_text(
-        json.dumps(pipelines, ensure_ascii=False, indent=2), "utf-8"
-    )
-    tmp.rename(PIPELINES_FILE)
+    atomic_json_save(PIPELINES_FILE, pipelines)
 
 
 # ══════════════════════════════════════════════════════════════

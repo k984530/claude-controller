@@ -112,7 +112,7 @@ async function handleFiles(files) {
     if (isImage) {
       thumb.className = 'img-thumb uploading';
       thumb.innerHTML = `<img src="${localUrl}" alt="${escapeHtml(file.name)}">
-        <button class="img-remove" onclick="removeAttachment(${tempIdx})" title="제거">&times;</button>`;
+        <button class="img-remove" onclick="removeAttachment(${tempIdx})" title="${t('remove')}">&times;</button>`;
     } else {
       thumb.className = 'file-thumb uploading';
       thumb.innerHTML = `
@@ -121,7 +121,7 @@ async function handleFiles(files) {
           <div class="file-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</div>
           <div class="file-size">${formatFileSize(file.size)}</div>
         </div>
-        <button class="file-remove" onclick="removeAttachment(${tempIdx})" title="제거">&times;</button>`;
+        <button class="file-remove" onclick="removeAttachment(${tempIdx})" title="${t('remove')}">&times;</button>`;
     }
     container.appendChild(thumb);
     updateAttachBadge();

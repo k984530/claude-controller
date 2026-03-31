@@ -27,25 +27,25 @@ async function generateSuggestions() {
   const btn = document.getElementById('btnGenerateSug');
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = _sugSpinner() + ' 분석 중...';
+    btn.innerHTML = _sugSpinner() + ' ' + t('sug_analyzing');
   }
 
   try {
     const result = await apiFetch('/api/suggestions/generate', { method: 'POST' });
     const count = result.generated || 0;
     if (count > 0) {
-      showToast(`${count}건의 새 제안이 생성되었습니다`);
+      showToast(t('sug_new_count').replace('{n}', count));
     } else {
-      showToast('새로운 제안이 없습니다. 작업 이력이 더 쌓이면 다시 시도하세요.');
+      showToast(t('sug_no_new'));
     }
     await loadSuggestions();
   } catch (e) {
-    showToast('분석 실패: ' + e.message, 'error');
+    showToast(t('sug_analyze_fail') + ': ' + e.message, 'error');
   } finally {
     _sugLoading = false;
     if (btn) {
       btn.disabled = false;
-      btn.innerHTML = _sugBtnIcon() + ' 분석 시작';
+      btn.innerHTML = _sugBtnIcon() + ' ' + t('sug_start');
     }
   }
 }
@@ -58,13 +58,13 @@ async function applySuggestion(id) {
 
   try {
     const result = await apiFetch(`/api/suggestions/${id}/apply`, { method: 'POST' });
-    showToast('제안이 적용되었습니다');
+    showToast(t('sug_applied'));
     // 스킬이 변경되었을 수 있으므로 리로드
     if (typeof loadSkills === 'function') loadSkills();
     if (typeof fetchPipelines === 'function') fetchPipelines();
     await loadSuggestions();
   } catch (e) {
-    showToast('적용 실패: ' + e.message, 'error');
+    showToast(t('sug_apply_fail') + ': ' + e.message, 'error');
     if (card) card.classList.remove('applying');
   }
 }
@@ -82,7 +82,7 @@ async function dismissSuggestion(id) {
     await apiFetch(`/api/suggestions/${id}/dismiss`, { method: 'POST' });
     await loadSuggestions();
   } catch (e) {
-    showToast('처리 실패: ' + e.message, 'error');
+    showToast(t('sug_process_fail') + ': ' + e.message, 'error');
     if (card) {
       card.style.opacity = '';
       card.style.transform = '';
@@ -107,9 +107,9 @@ function _renderSuggestions() {
     if (empty) {
       empty.style.display = '';
       empty.innerHTML = `
-        <p>현재 대기 중인 제안이 없습니다</p>
+        <p>${t('sug_no_pending')}</p>
         <p style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;">
-          "분석 시작"을 클릭하면 작업 이력을 분석하여 제안을 생성합니다
+          ${t('sug_help')}
         </p>
       `;
     }
@@ -132,7 +132,7 @@ function _renderSuggestionCard(s) {
     <div class="sug-card" data-sug-id="${escapeHtml(s.id)}">
       <div class="sug-card-header">
         <span class="sug-type-badge sug-type-${escapeHtml(s.type)}">${typeInfo.icon} ${typeInfo.label}</span>
-        <span class="sug-confidence" title="신뢰도 ${confidencePct}%">
+        <span class="sug-confidence" title="${t('sug_confidence').replace('{pct}', confidencePct)}">
           <span class="sug-confidence-bar" style="width:${confidencePct}%"></span>
           ${confidencePct}%
         </span>
@@ -141,13 +141,13 @@ function _renderSuggestionCard(s) {
       <div class="sug-card-desc">${escapeHtml(s.description)}</div>
       ${actionDesc ? `<div class="sug-card-preview">${actionDesc}</div>` : ''}
       <div class="sug-card-actions">
-        <button class="sug-btn sug-btn-dismiss" onclick="event.stopPropagation();dismissSuggestion('${escapeHtml(s.id)}')" title="무시">
+        <button class="sug-btn sug-btn-dismiss" onclick="event.stopPropagation();dismissSuggestion('${escapeHtml(s.id)}')" title="${t('sug_dismiss')}">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          무시
+          ${t('sug_dismiss')}
         </button>
         <button class="sug-btn sug-btn-apply" onclick="event.stopPropagation();applySuggestion('${escapeHtml(s.id)}')">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-          적용
+          ${t('sug_apply')}
         </button>
       </div>
     </div>
@@ -158,10 +158,10 @@ function _renderSuggestionCard(s) {
 
 function _sugTypeInfo(type) {
   const map = {
-    'new_skill': { label: '스킬 추가', icon: '⚡' },
-    'improve_skill': { label: '스킬 개선', icon: '🔧' },
-    'new_pipeline': { label: '자동화 추가', icon: '⏱' },
-    'cleanup': { label: '정리', icon: '🧹' },
+    'new_skill': { label: t('sug_type_new_skill'), icon: '⚡' },
+    'improve_skill': { label: t('sug_type_improve_skill'), icon: '🔧' },
+    'new_pipeline': { label: t('sug_type_new_pipeline'), icon: '⏱' },
+    'cleanup': { label: t('sug_type_cleanup'), icon: '🧹' },
   };
   return map[type] || { label: type, icon: '💡' };
 }
@@ -171,19 +171,19 @@ function _sugActionDesc(action) {
   const p = action.payload;
 
   if (action.type === 'new_skill') {
-    const cat = { plan: '기획', dev: '개발', design: '디자인', verify: '검증', etc: '기타' };
-    return `<span class="sug-preview-label">카테고리:</span> ${escapeHtml(cat[p.category] || p.category)} · `
-         + `<span class="sug-preview-label">이름:</span> ${escapeHtml(p.name || '')}`;
+    const cat = { plan: t('skill_cat_plan'), dev: t('skill_cat_dev'), design: t('skill_cat_design'), verify: t('skill_cat_verify'), etc: t('skill_cat_etc') };
+    return `<span class="sug-preview-label">${t('sug_label_category')}:</span> ${escapeHtml(cat[p.category] || p.category)} · `
+         + `<span class="sug-preview-label">${t('name_label')}:</span> ${escapeHtml(p.name || '')}`;
   }
   if (action.type === 'new_pipeline') {
-    return `<span class="sug-preview-label">간격:</span> ${escapeHtml(p.interval || '')} · `
-         + `<span class="sug-preview-label">프로젝트:</span> ${escapeHtml((p.project || '').split('/').pop())}`;
+    return `<span class="sug-preview-label">${t('sug_label_interval')}:</span> ${escapeHtml(p.interval || '')} · `
+         + `<span class="sug-preview-label">${t('project_label')}:</span> ${escapeHtml((p.project || '').split('/').pop())}`;
   }
   if (action.type === 'improve_skill') {
-    return `<span class="sug-preview-label">대상:</span> ${escapeHtml(p.skill_id || p.name || '')}`;
+    return `<span class="sug-preview-label">${t('sug_label_target')}:</span> ${escapeHtml(p.skill_id || p.name || '')}`;
   }
   if (action.type === 'cleanup_skill') {
-    return `<span class="sug-preview-label">삭제 대상:</span> ${escapeHtml(p.skill_id || '')}`;
+    return `<span class="sug-preview-label">${t('sug_label_del_target')}:</span> ${escapeHtml(p.skill_id || '')}`;
   }
   return '';
 }

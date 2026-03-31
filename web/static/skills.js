@@ -35,7 +35,7 @@ function _mergeWithDefaults(saved) {
   }
   return _FIXED_CATEGORIES.map(def => ({
     id: def.id,
-    name: def.name,
+    name: t('skill_cat_' + def.id),
     color: def.color,
     skills: savedMap[def.id] || [],
   }));
@@ -48,7 +48,7 @@ async function _saveSkills() {
       body: JSON.stringify(_skillCategories),
     });
   } catch (e) {
-    showToast('스킬 저장 실패: ' + e.message, 'error');
+    showToast(t('skill_save_fail') + ': ' + e.message, 'error');
   }
 }
 
@@ -65,12 +65,12 @@ function _renderSkillsSection() {
       </div>
       <div class="skills-cards">
         ${cat.skills.length === 0 ? `
-          <div class="skill-card-empty">스킬 없음</div>
+          <div class="skill-card-empty">${t('skill_empty')}</div>
         ` : ''}
         ${cat.skills.map((s, si) => _renderSkillCard(s, ci, si)).join('')}
         <button class="skill-add-btn" onclick="addSkill(${ci})">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          스킬 추가
+          ${t('skill_add')}
         </button>
       </div>
     </div>
@@ -83,15 +83,15 @@ function _renderSkillCard(skill, catIdx, skillIdx) {
       <div class="skill-card-name">${escapeHtml(skill.name)}</div>
       <div class="skill-card-desc">${escapeHtml(skill.desc || '')}</div>
       <div class="skill-card-btns">
-        <button class="skill-btn skill-btn-edit" onclick="editSkill(${catIdx},${skillIdx})" title="수정">
+        <button class="skill-btn skill-btn-edit" onclick="editSkill(${catIdx},${skillIdx})" title="${t('edit_label')}">
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          수정
+          ${t('edit_label')}
         </button>
-        <button class="skill-btn skill-btn-run" onclick="runSkill(${catIdx},${skillIdx})" title="실행">
+        <button class="skill-btn skill-btn-run" onclick="runSkill(${catIdx},${skillIdx})" title="${t('run_label')}">
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-          실행
+          ${t('run_label')}
         </button>
-        <button class="skill-btn skill-btn-del" onclick="deleteSkill(${catIdx},${skillIdx})" title="삭제">
+        <button class="skill-btn skill-btn-del" onclick="deleteSkill(${catIdx},${skillIdx})" title="${t('delete_label')}">
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
@@ -113,12 +113,11 @@ async function _showSkillRunModal(skill) {
   const prev = document.getElementById('skillRunOverlay');
   if (prev) prev.remove();
 
-  let recentDirs = [];
-  try { recentDirs = await apiFetch('/api/recent-dirs'); } catch {}
+  let [recentDirs, projects] = await Promise.all([
+    apiFetch('/api/recent-dirs').catch(() => []),
+    apiFetch('/api/projects').catch(() => []),
+  ]);
   if (!Array.isArray(recentDirs)) recentDirs = [];
-
-  let projects = [];
-  try { projects = await apiFetch('/api/projects'); } catch {}
   if (!Array.isArray(projects)) projects = [];
 
   const allPaths = [];
@@ -133,7 +132,7 @@ async function _showSkillRunModal(skill) {
   }
 
   const optionsHtml = allPaths.map(p =>
-    `<option value="${escapeHtml(p.path)}">${escapeHtml(p.label)} (${p.type === 'project' ? '프로젝트' : '최근'})</option>`
+    `<option value="${escapeHtml(p.path)}">${escapeHtml(p.label)} (${p.type === 'project' ? t('project_label') : t('recent_label')})</option>`
   ).join('');
 
   const overlay = document.createElement('div');
@@ -145,23 +144,23 @@ async function _showSkillRunModal(skill) {
       <div class="skill-run-title">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
         <span>${escapeHtml(skill.name)}</span>
-        <span class="skill-run-subtitle">실행</span>
+        <span class="skill-run-subtitle">${t('skill_run_subtitle')}</span>
       </div>
-      <div class="skill-run-prompt">${escapeHtml(skill.prompt || '(프롬프트 없음)')}</div>
+      <div class="skill-run-prompt">${escapeHtml(skill.prompt || t('skill_no_prompt'))}</div>
       <label class="skill-run-label">
-        프로젝트
+        ${t('project_label')}
         <select id="skillRunProject" class="skill-run-input">
-          <option value="">선택하세요</option>
+          <option value="">${t('skill_select_ph')}</option>
           ${optionsHtml}
         </select>
       </label>
       <label class="skill-run-label">
-        실행 주기 (선택)
-        <input type="text" id="skillRunInterval" class="skill-run-input" placeholder="예: 30m, 1h, 매일 09:00" />
+        ${t('skill_label_interval')}
+        <input type="text" id="skillRunInterval" class="skill-run-input" placeholder="${t('skill_interval_ph')}" />
       </label>
       <div class="skill-editor-actions">
-        <button class="btn-small btn-muted" onclick="this.closest('.editor-overlay').remove()">취소</button>
-        <button class="btn-small" onclick="_execSkillRun('${escapeHtml(escapeJsStr(skill.id))}')">실행</button>
+        <button class="btn-small btn-muted" onclick="this.closest('.editor-overlay').remove()">${t('cancel')}</button>
+        <button class="btn-small" onclick="_execSkillRun('${escapeHtml(escapeJsStr(skill.id))}')">${t('run_label')}</button>
       </div>
     </div>
   `;
@@ -173,13 +172,13 @@ async function _execSkillRun(skillId) {
   const interval = document.getElementById('skillRunInterval').value.trim();
 
   if (!projectPath) {
-    showToast('프로젝트를 선택하세요', 'error');
+    showToast(t('skill_project_req'), 'error');
     return;
   }
 
   const skill = _findSkill(skillId);
   if (!skill || !skill.prompt) {
-    showToast('스킬 프롬프트가 없습니다', 'error');
+    showToast(t('skill_no_prompt_err'), 'error');
     return;
   }
 
@@ -199,11 +198,11 @@ async function _execSkillRun(skillId) {
       method: 'POST',
       body: JSON.stringify(pipeBody),
     });
-    showToast(`실행 등록: ${pipe.name || pipe.id}`);
+    showToast(t('skill_registered') + ': ' + (pipe.name || pipe.id));
     if (typeof fetchPipelines === 'function') fetchPipelines();
     if (typeof runPipeline === 'function') runPipeline(pipe.id);
   } catch (err) {
-    showToast(`실행 실패: ${err.message}`, 'error');
+    showToast(t('skill_run_fail') + ': ' + err.message, 'error');
   }
 }
 
@@ -230,7 +229,7 @@ function deleteSkill(catIdx, skillIdx) {
   if (!cat) return;
   const skill = cat.skills[skillIdx];
   if (!skill) return;
-  if (!confirm(`"${skill.name}" 스킬을 삭제하시겠습니까?`)) return;
+  if (!confirm('"' + skill.name + '" - ' + t('skill_confirm_del'))) return;
 
   cat.skills.splice(skillIdx, 1);
   _saveSkills();
@@ -252,19 +251,19 @@ function _openSkillEditor(catIdx, skillIdx) {
   overlay.className = 'editor-overlay';
   overlay.innerHTML = `
     <div class="editor-modal skill-editor-modal">
-      <div class="skill-editor-title">${escapeHtml(cat.name)} — ${isNew ? '스킬 추가' : '스킬 수정'}</div>
-      <label>이름
-        <input type="text" id="skillEdName" value="${escapeHtml(skill.name)}" placeholder="스킬 이름" />
+      <div class="skill-editor-title">${escapeHtml(cat.name)} — ${isNew ? t('skill_add_title') : t('skill_edit_title')}</div>
+      <label>${t('name_label')}
+        <input type="text" id="skillEdName" value="${escapeHtml(skill.name)}" placeholder="${t('skill_name_ph')}" />
       </label>
-      <label>설명
-        <input type="text" id="skillEdDesc" value="${escapeHtml(skill.desc)}" placeholder="짧은 설명 (선택)" />
+      <label>${t('desc_label')}
+        <input type="text" id="skillEdDesc" value="${escapeHtml(skill.desc)}" placeholder="${t('skill_desc_ph')}" />
       </label>
-      <label>프롬프트
-        <textarea id="skillEdPrompt" rows="12" placeholder="이 스킬의 전체 프롬프트">${escapeHtml(skill.prompt)}</textarea>
+      <label>${t('prompt')}
+        <textarea id="skillEdPrompt" rows="12" placeholder="${t('skill_prompt_ph')}">${escapeHtml(skill.prompt)}</textarea>
       </label>
       <div class="skill-editor-actions">
-        <button class="btn-small btn-muted" onclick="document.getElementById('skillEditorOverlay').remove()">취소</button>
-        <button class="btn-small" onclick="_saveSkillEditor(${catIdx},${skillIdx})">저장</button>
+        <button class="btn-small btn-muted" onclick="document.getElementById('skillEditorOverlay').remove()">${t('cancel')}</button>
+        <button class="btn-small" onclick="_saveSkillEditor(${catIdx},${skillIdx})">${t('save')}</button>
       </div>
     </div>
   `;
@@ -281,7 +280,7 @@ function _saveSkillEditor(catIdx, skillIdx) {
   const promptVal = document.getElementById('skillEdPrompt').value.trim();
 
   if (!name) {
-    showToast('스킬 이름을 입력하세요', 'error');
+    showToast(t('skill_name_req'), 'error');
     return;
   }
 

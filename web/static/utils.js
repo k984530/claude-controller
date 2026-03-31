@@ -100,7 +100,7 @@ function requestNotificationPermission() {
 function notifyJobDone(jobId, status, prompt) {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   if (document.hasFocus()) return;
-  const title = status === 'done' ? `Job #${jobId} 완료` : `Job #${jobId} 실패`;
+  const title = status === 'done' ? t('notify_job_done').replace('{id}', jobId) : t('notify_job_failed').replace('{id}', jobId);
   const body = truncate(prompt || '', 80);
   const icon = status === 'done'
     ? 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="80" font-size="80">%E2%9C%85</text></svg>'

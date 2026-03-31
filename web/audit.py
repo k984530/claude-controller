@@ -44,7 +44,6 @@ def log_api_call(method, path, client_ip, status, duration_ms):
     }
 
     try:
-        DATA_DIR.mkdir(parents=True, exist_ok=True)
         # 크기 기반 로테이션: 최대 1세대만 유지
         if AUDIT_LOG_FILE.exists():
             try:

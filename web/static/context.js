@@ -6,6 +6,28 @@ let _contextMode = 'new';
 let _contextSessionId = null;
 let _contextSessionPrompt = null;
 
+function _saveContext() {
+  try {
+    localStorage.setItem('ctxMode', _contextMode);
+    localStorage.setItem('ctxSessionId', _contextSessionId || '');
+    localStorage.setItem('ctxSessionPrompt', _contextSessionPrompt || '');
+  } catch {}
+}
+
+function _restoreContext() {
+  try {
+    const mode = localStorage.getItem('ctxMode');
+    const sid = localStorage.getItem('ctxSessionId');
+    const prompt = localStorage.getItem('ctxSessionPrompt');
+    if (mode && mode !== 'new' && sid) {
+      _contextMode = mode;
+      _contextSessionId = sid;
+      _contextSessionPrompt = prompt || null;
+      _updateContextUI();
+    }
+  } catch {}
+}
+
 function setContextMode(mode) {
   _contextMode = mode;
   _contextSessionId = null;
@@ -51,6 +73,7 @@ function _updateContextUI() {
     }
     if (promptInfo) promptInfo.textContent = sid ? `fork:${sid}` : 'fork';
   }
+  _saveContext();
 }
 
 function _formatCwdShort(cwd) {
@@ -77,14 +100,14 @@ function _renderSessionItem(s) {
 function _renderSessionList(sessions, grouped) {
   const list = document.getElementById('sessionPickerList');
   if (sessions.length === 0) {
-    list.innerHTML = '<div style="padding:12px;text-align:center;color:var(--text-muted);font-size:0.75rem;">세션이 없습니다</div>';
+    list.innerHTML = `<div style="padding:12px;text-align:center;color:var(--text-muted);font-size:0.75rem;">${t('no_sessions')}</div>`;
     return;
   }
 
   if (grouped && Object.keys(grouped).length > 0) {
     let html = '';
     for (const [project, items] of Object.entries(grouped)) {
-      const label = project || '(프로젝트 미지정)';
+      const label = project || t('project_unspecified');
       html += `<div class="session-group-label">${escapeHtml(label)}</div>`;
       html += items.map(s => _renderSessionItem(s)).join('');
     }
@@ -124,7 +147,7 @@ async function openSessionPicker(mode) {
   const filterProject = document.getElementById('sessionFilterProject');
   const searchInput = document.getElementById('sessionSearchInput');
 
-  title.textContent = mode === 'resume' ? 'Resume 세션 선택' : 'Fork 세션 선택';
+  title.textContent = mode === 'resume' ? t('session_picker_resume') : t('session_picker_fork');
   picker.classList.add('open');
   list.innerHTML = '<div style="padding:12px;text-align:center;"><span class="spinner"></span></div>';
   searchInput.value = '';
@@ -151,7 +174,7 @@ async function openSessionPicker(mode) {
 
     _renderSessionList(sessions, grouped);
   } catch (err) {
-    list.innerHTML = `<div style="padding:12px;color:var(--red);">세션 목록 로딩 실패: ${err.message}</div>`;
+    list.innerHTML = `<div style="padding:12px;color:var(--red);">${t('session_load_fail')}: ${err.message}</div>`;
   }
 }
 
